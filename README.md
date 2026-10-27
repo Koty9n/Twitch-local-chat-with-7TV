@@ -6,11 +6,11 @@
 
 **Лёгкий чат Twitch для OBS с 7TV-смайлами, своими рамками, шрифтами и визуальным конструктором.**
 
-[![Latest release](https://img.shields.io/github/v/release/Koty9n/Twitch-chat-7TV?label=%D0%BF%D0%BE%D1%81%D0%BB%D0%B5%D0%B4%D0%BD%D1%8F%D1%8F%20%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F&color=9146ff)](https://github.com/Koty9n/Twitch-chat-7TV/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/Koty9n/Twitch-local-chat-with-7TV?label=%D0%BF%D0%BE%D1%81%D0%BB%D0%B5%D0%B4%D0%BD%D1%8F%D1%8F%20%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F&color=9146ff)](https://github.com/Koty9n/Twitch-local-chat-with-7TV/releases/latest)
 ![Platform](https://img.shields.io/badge/Windows-10%2F11-0078d4)
 ![Python](https://img.shields.io/badge/Python-3.9%2B-3776ab)
 
-[Скачать последнюю версию](https://github.com/Koty9n/Twitch-chat-7TV/releases/latest) · [Установка](#установка) · [Подключение к OBS](#подключение-к-obs)
+[Скачать последнюю версию](https://github.com/Koty9n/Twitch-local-chat-with-7TV/releases/latest) · [Установка](#установка) · [Подключение к OBS](#подключение-к-obs)
 
 </div>
 
@@ -32,7 +32,7 @@
 
 ## Установка
 
-1. Скачайте архив **`Twitch_chat_7TV.zip`** со страницы [Releases](https://github.com/Koty9n/Twitch-chat-7TV/releases/latest) и распакуйте его в любую папку.
+1. Скачайте архив **`Twitch_chat_7TV.zip`** со страницы [Releases](https://github.com/Koty9n/Twitch-local-chat-with-7TV/releases/latest) и распакуйте его в любую папку.
 2. Запустите **`install.bat`** двойным кликом. Он найдёт Python 3.9+ (если его нет, откроет страницу загрузки; при установке отметьте «Add python.exe to PATH»), поставит зависимости и создаст ярлык «Twitch chat 7TV» на рабочем столе.
 3. Запускайте программу ярлыком. Откроется окно программы, чёрного окна консоли нет.
 4. В окне введите канал и нажмите «Сохранить и подключить».
@@ -235,13 +235,13 @@
 
 <br>
 
-**Из программы.** Укажите источник обновлений в «Настройки → Обновления»: GitHub-репозиторий в виде `Koty9n/Twitch-chat-7TV` (берётся последний Release, тег вида `v1.5.0` и приложенный zip). Либо https-ссылка на `version.json`:
+**Из программы.** Укажите источник обновлений в «Настройки → Обновления»: GitHub-репозиторий в виде `Koty9n/Twitch-local-chat-with-7TV` (берётся последний Release, тег вида `v1.5.0` и приложенный zip). Либо https-ссылка на `version.json`:
 
 ```json
 {"version": "1.5.0", "url": "https://.../Twitch_chat_7TV.zip", "notes": "что нового"}
 ```
 
-Автоустановка работает для обычной установки в Windows. Для `.exe` показывается ссылка на скачивание.
+Название релиза может быть любым, номер версии берётся из тега или названия (`v1.5.0`, `b1.0`, «Twitch chat 1.5.0»). Главное, чтобы в нём были цифры и был приложен zip. Автоустановка работает для обычной установки в Windows. Для `.exe` показывается ссылка на скачивание.
 
 **Через `update.bat`.** Запустите его, выберите zip с новой версией (или перетащите zip на `update.bat`). Скрипт закроет приложение (спросит), сохранит копию текущих файлов в `_backup\<дата>`, заменит файлы программы и при необходимости обновит зависимости. Папка `data` (настройки, токен, подложки, шрифты, кеш) и окружение `.venv` не затрагиваются.
 
@@ -297,6 +297,6 @@
 
 <div align="center">
 
-Программа не связана с Twitch, 7TV и OBS Project. Все названия принадлежат их владельцам.
+Лицензия: [GNU GPL v3](LICENSE). Программа не связана с Twitch, 7TV и OBS Project. Все названия принадлежат их владельцам.
 
 </div>

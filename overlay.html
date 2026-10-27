@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Chat overlay</title>
+<link rel="stylesheet" href="/bubble.css">
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+body.preview{background:repeating-conic-gradient(#1c1c20 0 25%,#26262b 0 50%) 0 0/20px 20px}
+#stack{--ms:450ms;--dir:-1;--in:slide;--out:out-fade;
+  position:absolute;inset:0;box-sizing:border-box;padding:12px;display:flex;flex-direction:column;
+  justify-content:flex-end;align-items:flex-start}
+#stack.top{justify-content:flex-start}
+#stack.scaled{inset:auto;top:0;left:0;width:calc(100% / var(--ui));height:calc(100% / var(--ui));
+  transform:scale(var(--ui));transform-origin:0 0}
+#stack.right{align-items:flex-end}
+
+/* строка: плавное схлопывание/раскрытие высоты */
+.row{display:grid;grid-template-rows:0fr;max-width:var(--maxw);transition:grid-template-rows var(--ms) cubic-bezier(.2,.8,.2,1)}
+.row.in{grid-template-rows:1fr}
+.row.out{grid-template-rows:0fr}
+.box{min-height:0;display:flow-root;overflow-y:clip}
+.row.settled .box{overflow:visible}
+#stack .msg{animation:var(--in) var(--ms) cubic-bezier(.2,.8,.2,1) both}
+/* GPU-слой только пока идёт анимация появления, потом освобождаем память */
+.row:not(.settled) .msg{will-change:transform,opacity}
+.row.out .msg{animation:var(--out) var(--ms) ease-in both}
+
+@keyframes slide{from{opacity:0;transform:translateX(calc(var(--dir)*70px))}to{opacity:1;transform:none}}
+@keyframes up{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{opacity:0;transform:scale(.5)}60%{opacity:1;transform:scale(1.08)}100%{transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes bounce{0%{opacity:0;transform:translateY(50px)}55%{opacity:1;transform:translateY(-10px)}78%{transform:translateY(4px)}100%{transform:none}}
+@keyframes blur{from{opacity:0;filter:blur(14px);transform:scale(1.12)}to{opacity:1;filter:none;transform:none}}
+@keyframes flip{from{opacity:0;transform:perspective(600px) rotateX(-90deg)}to{opacity:1;transform:perspective(600px)}}
+@keyframes wipe{from{clip-path:inset(-60px 100% -60px 0)}to{clip-path:inset(-60px -60px -60px -60px)}}
+@keyframes out-fade{to{opacity:0}}
+@keyframes out-slide{to{opacity:0;transform:translateX(calc(var(--dir)*70px))}}
+@keyframes out-shrink{to{opacity:0;transform:scale(.6)}}
+</style>
+</head>
+<body>
+<div id="stack" class="bk"></div>
+<script src="/bubble.js"></script>
+<script>
+"use strict";
+const BK = BubbleKit;
+const params = new URLSearchParams(location.search);
+if (params.has("preview")) document.body.classList.add("preview");
+
+const stack = document.getElementById("stack");
+let S = null, T = null;     // действующий стиль (с учётом автозащиты) и тема
+let S0 = null;              // стиль как он пришёл с сервера
+let guard = 0;              // уровень автозащиты: 0 нет, 1 → баланс, 2 → эконом, 3 → без анимаций и эффектов
+let users = {};             // эффекты ников: { ник: {...} }
+let rows = [];              // активные сообщения [{row,msg,m,id,user,timer,gone}]
+const queue = [];           // сообщения, пришедшие до первого стиля
+let applying = 0;
+
+// стиль с учётом автозащиты: при подтормаживании упрощаем чат ступенями
+function effStyle() {
+  const o = Object.assign({}, S0), order = ["full", "balanced", "eco"];
+  const lvl = S0.game ? 3 : (S0.guard === false ? 0 : guard);       // режим игры = самый строгий уровень сразу
+  const i = Math.max(order.indexOf(BK.eff(S0).perf), Math.min(lvl, 2));
+  o.perf = order[i];
+  if (lvl >= 3) { o.animIn = "none"; o.animOut = "none"; o.animMs = 0; }
+  return o;
+}
+
+async function applyAll() {
+  if (!S0 || !T) return;
+  S = effStyle();
+  const my = ++applying;
+  const set = (k, v) => stack.style.setProperty(k, v);
+  set("--ms", S.animMs + "ms"); set("--dir", S.align === "right" ? 1 : -1);
+  // blur считается на GPU каждый кадр: в эконом-режиме заменяем на обычное появление
+  set("--in", BK.eff(S).lite && S.animIn === "blur" ? "fade" : S.animIn); set("--out", "out-" + S.animOut);
+  // масштаб всего чата: уменьшаем/увеличиваем область, затем возвращаем её к размеру окна через transform
+  const ui = Math.max(30, Math.min(300, +S.uiScale || 100)) / 100;
+  set("--ui", ui); stack.classList.toggle("scaled", Math.abs(ui - 1) > 0.001);
+  stack.classList.toggle("ultra", !!S0.game || (S0.guard !== false && guard >= 3));
+  stack.classList.toggle("top", S.anchor === "top");
+  stack.classList.toggle("right", S.align === "right");
+  await BK.apply(stack, S, T, {font: true});
+  if (my !== applying) return;
+  rebuild();                                  // уже показанные сообщения принимают новый вид сразу
+  while (queue.length) addMsg(queue.shift());
+  trim();
+}
+
+// пересобираем содержимое показанных сообщений (без повторной анимации появления)
+let rebuildPending = false;
+function rebuild() {
+  if (rebuildPending) return;
+  rebuildPending = true;
+  requestAnimationFrame(() => {
+    rebuildPending = false;
+    for (const it of rows) {
+      const msg = BK.build(it.m, S, T, users);
+      msg.style.animation = "none";
+      it.msg.replaceWith(msg); it.msg = msg;
+    }
+  });
+}
+
+function addMsg(m, fast) {
+  if (!S || !T) { queue.push(m); return; }
+  const row = BK.el("div", "row"), box = BK.el("div", "box");
+  const msg = BK.build(m, S, T, users);
+  if (fast) row.style.setProperty("--ms", "120ms");      // поток сообщений: короткая анимация, чтобы не копить нагрузку
+  box.appendChild(msg); row.appendChild(box); stack.appendChild(row);
+  const item = { row, msg, m, id: m.id, user: m.user, gone: false, timer: 0 };
+  rows.push(item);
+  void row.offsetHeight;                      // фиксируем стартовое состояние для transition
+  row.classList.add("in");
+  setTimeout(() => { if (!item.gone) row.classList.add("settled"); }, (fast ? 120 : S.animMs) + 30);
+  watch();
+  if (S.lifetime > 0) item.timer = setTimeout(() => removeRow(item), S.lifetime * 1000);
+  trim();
+}
+
+// входящие сообщения выводим не чаще ~30 в секунду, при рейде лишнее отбрасываем
+const incoming = []; let pumping = false;
+// скорость вывода ограничена настройкой «Макс. сообщений в секунду»: рейд не создаёт пик нагрузки
+const rate = () => Math.max(1, Math.min(30, +(S0 && S0.maxPerSec) || 5));
+function inbox(m) {
+  incoming.push(m);
+  const cap = Math.max(6, rate() * 2);
+  if (incoming.length > cap) incoming.splice(0, incoming.length - cap);
+  if (!pumping) { pumping = true; setTimeout(pump, Math.max(0, lastAdd + 1000 / rate() - performance.now())); }
+}
+let lastAdd = -1e9;
+function pump() {
+  const m = incoming.shift();
+  if (m) { lastAdd = performance.now(); addMsg(m, incoming.length >= 3); }
+  if (incoming.length) setTimeout(pump, 1000 / rate()); else pumping = false;
+}
+
+/* ---------- автозащита FPS ----------
+   Пока чат что-то анимирует, смотрим на длинные задачи и рывки кадров. Если чат подтормаживает,
+   упрощаем эффекты на ступень (до полного отключения анимаций). Вне анимаций ничего не измеряем,
+   поэтому в покое чат не создаёт нагрузки. */
+let watchUntil = 0, watching = false, lastT = 0, frames = [], longs = [];
+try {
+  new PerformanceObserver(l => { const n = performance.now(); for (const e of l.getEntries()) if (e.duration > 60) { longs.push(n); longTotal++; } }).observe({entryTypes: ["longtask"]});
+} catch (_) {}
+function watch() {
+  watchUntil = performance.now() + 3500;
+  if (watching || !S0 || S0.guard === false) return;
+  watching = true; lastT = 0; frames = []; requestAnimationFrame(tick);
+}
+function tick(t) {
+  const now = performance.now();
+  if (lastT) { const d = t - lastT; if (d < 500) frames.push([now, d]); }   // длинные паузы = источник скрыт, не считаем
+  lastT = t;
+  while (frames.length && now - frames[0][0] > 4000) frames.shift();
+  while (longs.length && now - longs[0] > 5000) longs.shift();
+  if (guard < 3) {
+    let bad = longs.length >= 3;                      // три долгих задачи подряд на главном потоке
+    if (!bad && frames.length >= 24) {                // или рваные кадры
+      const ds = frames.map(f => f[1]).sort((a, b) => a - b), med = ds[ds.length >> 1];
+      bad = frames.filter(f => f[1] > Math.max(45, med * 2.5)).length / frames.length > 0.25;
+    }
+    if (bad) {
+      guard++; frames = []; longs = [];
+      console.warn("chat: автозащита, уровень " + guard);
+      applyAll();
+    }
+  }
+  if (now < watchUntil && S0 && S0.guard !== false) requestAnimationFrame(tick); else { watching = false; lastT = 0; }
+}
+
+function trim() {
+  if (!S) return;
+  while (rows.length > S.maxMessages) removeRow(rows[0]);
+}
+
+function removeRow(item) {
+  if (item.gone) return;
+  item.gone = true; clearTimeout(item.timer);
+  rows = rows.filter(r => r !== item);
+  item.row.classList.remove("in", "settled");
+  item.row.classList.add("out");
+  setTimeout(() => item.row.remove(), (S ? S.animMs : 400) + 80);
+}
+
+// раз в 10 с сообщаем серверу свою нагрузку (только для окна диагностики в настройках)
+let ownWs = null, longTotal = 0;
+if (!params.has("preview")) setInterval(() => {
+  if (!ownWs || ownWs.readyState !== 1 || document.hidden) return;
+  const ds = frames.map(f => f[1]).sort((a, b) => a - b);
+  ownWs.send(JSON.stringify({type: "stats", frameMs: ds.length ? Math.round(ds[ds.length >> 1]) : null, longs: longTotal, rows: rows.length,
+    anim: document.querySelectorAll("#stack .emote").length, guard, game: !!(S0 && S0.game)}));
+}, 10000);
+
+function connect(delay = 500) {
+  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onopen = () => { delay = 500; ownWs = ws; };
+  ws.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === "style") { S0 = d.style; guard = 0; applyAll(); }
+    else if (d.type === "theme") { T = d.theme; applyAll(); }
+    else if (d.type === "users") { users = d.users || {}; if (S && T) rebuild(); }
+    else if (d.type === "msg") inbox(d);
+    else if (d.type === "delete") rows.filter(r => r.id === d.id).forEach(removeRow);
+    else if (d.type === "clear_user") rows.filter(r => r.user === d.user).forEach(removeRow);
+    else if (d.type === "clear") rows.slice().forEach(removeRow);
+  };
+  ws.onclose = () => setTimeout(() => connect(Math.min(delay * 1.5, 10000)), delay);
+  ws.onerror = () => ws.close();
+}
+connect();
+</script>
+</body>
+</html>
