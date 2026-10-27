@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Конструктор чата</title>
+<link rel="stylesheet" href="/bubble.css">
+<script src="/theme.js"></script>
+<link rel="stylesheet" href="/theme.css">
+<style>
+html,body{height:100%}
+body{overflow:hidden;font-size:13px}
+#app{display:grid;grid-template-columns:minmax(360px,450px) 1fr;height:100vh}
+#side{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--panel)}
+#side header{display:flex;align-items:center;gap:8px;padding:14px 18px 10px}
+#side header b{font-size:15px;flex:1}
+#saved{color:var(--faint);font-size:12px}
+#tabs{display:flex;gap:4px;margin:0 18px;padding:4px;background:var(--card2);border:1px solid var(--line);border-radius:12px;overflow-x:auto}
+#tabs button{flex:1;background:transparent;border:0;border-radius:9px;color:var(--muted);padding:8px 10px;white-space:nowrap}
+#tabs button:hover{background:var(--btn);color:var(--text)}
+#tabs button.on{background:var(--accent);color:#fff;font-weight:600}
+#panel{flex:1;overflow:auto;padding:16px 18px 24px}
+#stage{display:flex;flex-direction:column;min-width:0;min-height:0}
+.bar{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+.bar label{flex-direction:row;align-items:center;gap:8px}
+.bar input[type=number]{width:90px}
+#canvas{flex:1;overflow:auto;padding:46px 30px 30px}
+#canvas.checker{background:repeating-conic-gradient(#1c1c20 0 25%,#26262b 0 50%) 0 0/20px 20px}
+#canvas.dark{background:#101014}
+#canvas.light{background:#e9e9ef}
+#canvas.green{background:#17402b}
+#canvas.game{background:linear-gradient(160deg,#2b5876,#4e4376 55%,#c94b4b)}
+#pv{display:flex;flex-direction:column;align-items:flex-start;padding:4px}
+.pvrow{max-width:var(--maxw)}
+
+button.sm{padding:3px 9px}
+label{min-width:0}
+label .cap b{color:var(--text);font-weight:600}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin-bottom:14px}
+.grid .wide{grid-column:1/-1}
+.sec{font-weight:700;margin:22px 0 10px;color:var(--text);font-size:13px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.sec:first-child{margin-top:0}
+.hint{margin:4px 0 12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+
+.frames{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.fcard{display:flex;flex-direction:column;gap:6px;padding:8px;text-align:left;background:var(--card);border:2px solid var(--line);border-radius:12px}
+.fcard.on{border-color:var(--accent);background:var(--accent-soft)}
+.fcard .fname{font-size:12px}
+.fthumb{padding:16px 10px 8px;border-radius:8px;overflow:hidden;background:repeating-conic-gradient(#1c1c20 0 25%,#26262b 0 50%) 0 0/12px 12px;pointer-events:none}
+.fthumb .msg{margin:0}
+
+.lib{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.thumb{position:relative;aspect-ratio:1;background:repeating-conic-gradient(#222 0 25%,#2c2c32 0 50%) 0 0/10px 10px;border:1px solid var(--line);border-radius:8px;cursor:pointer;padding:3px;display:flex}
+.thumb img{width:100%;height:100%;object-fit:contain}
+.thumb .x{position:absolute;top:2px;right:2px;padding:0 6px;line-height:18px;font-size:11px;display:none}
+.thumb:hover .x{display:block}
+.glyphs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.glyphs button{font-size:16px;padding:3px 9px}
+.items{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--card);border:1px solid var(--line);border-radius:10px;cursor:pointer}
+.item.on{border-color:var(--accent);background:var(--accent-soft)}
+.item .ic{width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+.item .ic img{max-width:100%;max-height:100%}
+.item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.anchor{display:grid;grid-template-columns:repeat(3,24px);gap:4px}
+.anchor .an{width:24px;height:24px;padding:0;border-radius:6px}
+.anchor .an.on{background:var(--accent);border-color:var(--accent)}
+
+.slicer{position:relative;display:inline-block;max-width:100%;margin:6px 0 12px;background:repeating-conic-gradient(#222 0 25%,#2c2c32 0 50%) 0 0/12px 12px;border:1px solid var(--line);touch-action:none}
+.slicer img{display:block;max-width:100%;max-height:300px}
+.slicer .ln{position:absolute;background:#ff4d6d;z-index:2}
+.slicer .ln.v{top:0;bottom:0;width:1px;margin-left:-1px;cursor:ew-resize}
+.slicer .ln.h{left:0;right:0;height:1px;margin-top:-1px;cursor:ns-resize}
+.slicer .ln::after{content:"";position:absolute;inset:-5px}
+#toast{left:18px;transform:none;bottom:18px}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <header><b>🎨 Конструктор чата</b><span id="saved">загрузка…</span></header>
+    <nav id="tabs"></nav>
+    <div id="panel"></div>
+  </aside>
+  <main id="stage">
+    <div class="bar">
+      <label class="chk">Ширина области, px <input type="number" id="pw" value="560" min="200" max="1600" step="10"></label>
+      <label class="chk">Фон
+        <select id="pbg"><option value="checker">Шахматка</option><option value="dark">Тёмный</option><option value="light">Светлый</option><option value="green">Хромакей</option><option value="game">Игра (пример)</option></select>
+      </label>
+      <span class="hint" style="margin:0">Перетаскивай декор прямо в примере (вкладка «Декор»). Изменения сразу идут в OBS.</span>
+    </div>
+    <div id="canvas" class="checker"><div id="pv" class="bk"></div></div>
+  </main>
+</div>
+<div id="toast"></div>
+<script src="/bubble.js"></script>
+<script>
+"use strict";
+const BK = BubbleKit;
+const $ = id => document.getElementById(id);
+const E = (tag, cls, text) => BK.el(tag, cls, text);
+const api = async (url, opt = {}) => {
+  const r = await fetch(url, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+};
+const post = (url, body) => api(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+function toast(msg, ok) {
+  const t = $("toast"); t.textContent = msg; t.style.background = ok ? "#1f7a3d" : "#a02a2a"; t.style.display = "block";
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", ok ? 6000 : 4500);
+}
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+let S = {}, T = BK.defaultTheme(), users = {}, assets = {skins: [], fonts: [], decor: []};
+let sel = null, tab = "frames", pendS = {}, dirtyT = false, saveTimer = 0, replDecor = true;
+const pv = $("pv");
+
+const DECOR_DEF = {kind: "glyph", file: "", glyph: "★", color: "#ffffff", ax: 100, ay: 0, ox: 0, oy: 0, w: 40, rot: 0, op: 100, flip: false, layer: "front", anim: "none"};
+const SAMPLES = [
+  {user: "streamer", name: "Streamer", color: "#ff4d6d", bd: ["b"], parts: [{t: "x", v: "Привет, чат! Проверка оформления"}]},
+  {user: "viewer_42", name: "Viewer_42", color: "#4cc9f0", parts: [{t: "x", v: "Очень длинное сообщение, чтобы посмотреть как переносится текст внутри подложки и не ломается ли дизайн"}]},
+  {user: "moder", name: "Moder", color: "#2ec4b6", bd: ["m"], parts: [{t: "x", v: "Коротко"}]},
+  {user: "leadmod", name: "LeadMod", color: "#a970ff", bd: ["l"], parts: [{t: "x", v: "Главный модератор"}]},
+];
+const TABS = [["frames", "Рамки"], ["base", "Подложка"], ["grad", "Градиент"], ["text", "Текст"], ["decor", "Декор"]];
+
+/* ---------- сохранение (в OBS уходит сразу) ---------- */
+function schedule() {
+  $("saved").textContent = "сохранение…";
+  clearTimeout(saveTimer); saveTimer = setTimeout(flush, 250);
+}
+async function flush() {
+  const body = {};
+  if (Object.keys(pendS).length) { body.style = pendS; pendS = {}; }
+  if (dirtyT) { body.theme = T; dirtyT = false; }
+  if (!Object.keys(body).length) { $("saved").textContent = "сохранено"; return; }
+  try { await post("/api/config", body); $("saved").textContent = "сохранено"; }
+  catch (e) { $("saved").textContent = "ошибка"; toast(e.message); }
+}
+function touch(which, key) {
+  if (which === "S") pendS[key] = S[key]; else dirtyT = true;
+  render(); schedule();
+}
+
+/* ---------- предпросмотр ---------- */
+function render() {
+  BK.apply(pv, S, T, {font: true});
+  pv.style.width = (+$("pw").value || 560) + "px";
+  pv.textContent = "";
+  const edit = tab === "decor";
+  for (const m of SAMPLES) {
+    const row = E("div", "pvrow");
+    row.append(BK.build(m, S, T, users, {edit, selected: sel}));
+    pv.append(row);
+  }
+}
+$("pw").addEventListener("input", render);
+$("pbg").addEventListener("change", () => { $("canvas").className = $("pbg").value; });
+
+/* ---------- конструктор полей ---------- */
+function F(parent, spec) {
+  const O = () => spec.t === "S" ? S : spec.t === "T" ? T : spec.t;
+  const which = spec.t === "S" ? "S" : "T";
+  const k = spec.k, type = spec.type;
+  const lab = E("label", spec.wide ? "wide" : "");
+  let inp, valEl;
+  if (type === "check") {
+    inp = E("input"); inp.type = "checkbox"; inp.checked = !!O()[k];
+    lab.classList.add("chk", "wide"); lab.append(inp, spec.label);
+  } else {
+    const cap = E("span", "cap", spec.label); lab.append(cap);
+    if (type === "select") {
+      inp = E("select"); for (const [v, t] of spec.opts) inp.add(new Option(t, v)); inp.value = O()[k];
+    } else {
+      inp = E("input"); inp.type = type === "num" ? "number" : type;
+      if (spec.min != null) inp.min = spec.min; if (spec.max != null) inp.max = spec.max; if (spec.step != null) inp.step = spec.step;
+      if (type === "text") inp.maxLength = spec.maxLength || 12;
+      inp.value = O()[k] ?? "";
+    }
+    if (type === "range") { valEl = E("b", "", " " + O()[k]); cap.append(valEl); }
+    lab.append(inp);
+  }
+  inp.dataset.k = k;
+  inp.addEventListener(type === "select" || type === "check" ? "change" : "input", () => {
+    let v;
+    if (type === "check") v = inp.checked;
+    else if (type === "num" || type === "range") { v = Number(inp.value); if (!Number.isFinite(v)) return; }
+    else v = inp.value;
+    O()[k] = v;
+    if (valEl) valEl.textContent = " " + v;
+    touch(which, k);
+    if (spec.rebuild) buildPanel();
+  });
+  parent.append(lab);
+  return lab;
+}
+const grid = p => { const g = E("div", "grid"); p.append(g); return g; };
+const sec = (p, t) => p.append(E("div", "sec", t));
+const hint = (p, t) => p.append(E("div", "hint", t));
+
+/* ---------- вкладки ---------- */
+function buildTabs() {
+  const nav = $("tabs"); nav.textContent = "";
+  for (const [id, name] of TABS) {
+    const b = E("button", id === tab ? "on" : "", name);
+    b.onclick = () => { tab = id; buildTabs(); buildPanel(); render(); };
+    nav.append(b);
+  }
+}
+function buildPanel() {
+  const p = $("panel"), top = p.scrollTop;
+  p.textContent = "";
+  ({frames: panelFrames, base: panelBase, grad: panelGrad, text: panelText, decor: panelDecor})[tab](p);
+  p.scrollTop = top;
+}
+
+/* ===== Рамки ===== */
+function applyFrame(f) {
+  Object.assign(S, f.S);
+  for (const k of Object.keys(f.S)) pendS[k] = S[k];
+  const keep = {};
+  for (const k of ["layout", "textAlign", "maxW", "minW", "decorScale", "gradOn", "gradC1", "gradC2", "gradAngle", "gradAlpha"]) keep[k] = T[k];
+  const decor = replDecor ? (f.decor || []).map(d => ({...DECOR_DEF, ...d, id: uid()})) : T.decor;
+  T = Object.assign(BK.defaultTheme(), keep, f.T, {frame: f.id, base: "css", decor});
+  sel = null; dirtyT = true; render(); buildPanel(); schedule();
+}
+function panelFrames(p) {
+  hint(p, "Готовые рамки: выбери, и они заменят подложку, контур, свечение и отступы. Потом всё можно подправить на других вкладках. Своя PNG-рамка: вкладка «Подложка».");
+  const g = grid(p);
+  const lab = E("label", "chk wide"); const cb = E("input"); cb.type = "checkbox"; cb.checked = replDecor;
+  cb.onchange = () => { replDecor = cb.checked; };
+  lab.append(cb, "Заменять мой декор декором рамки"); g.append(lab);
+  const box = E("div", "frames");
+  for (const f of BK.FRAMES) {
+    const card = E("button", "fcard" + (T.frame === f.id ? " on" : ""));
+    const th = E("div", "fthumb");
+    const S2 = Object.assign({}, S, f.S, {fontSize: 17, textScale: 100, gap: 0, perf: "eco", skinMode: "slice"});
+    const T2 = Object.assign(BK.defaultTheme(), f.T, {frame: f.id, base: "css", decorScale: 60, maxW: 100,
+      decor: (f.decor || []).map((d, i) => ({...DECOR_DEF, ...d, id: "t" + i}))});
+    BK.apply(th, S2, T2, {});
+    th.append(BK.build({user: "x", name: "Streamer", color: "#ff6b8a", parts: [{t: "x", v: "Привет, чат!"}]}, S2, T2, {}));
+    card.append(th, E("span", "fname", f.name));
+    card.onclick = () => applyFrame(f);
+    box.append(card);
+  }
+  p.append(box);
+}
+
+/* ===== Подложка ===== */
+function panelBase(p) {
+  const g = grid(p);
+  F(g, {t: "T", k: "base", type: "select", wide: 1, rebuild: true, label: "Тип подложки",
+        opts: [["css", "Рамка из кода (заливка и контур)"], ["png", "Своя PNG-картинка"]]});
+  if (T.base === "png") pngBlock(p); else cssBlock(p);
+  sec(p, "Свечение и тень");
+  const g2 = grid(p);
+  F(g2, {t: "T", k: "glowSize", type: "range", min: 0, max: 60, label: "Свечение, px"});
+  F(g2, {t: "T", k: "glowColor", type: "color", label: "Цвет свечения"});
+  F(g2, {t: "T", k: "shadowSize", type: "range", min: 0, max: 60, wide: 1, label: "Мягкая тень, px"});
+}
+function cssBlock(p) {
+  const g = grid(p);
+  F(g, {t: "T", k: "bgMode", type: "select", rebuild: true, label: "Заливка", opts: [["solid", "Один цвет"], ["gradient", "Градиент"]]});
+  F(g, {t: "S", k: "bgColor", type: "color", label: T.bgMode === "gradient" ? "Цвет 1" : "Цвет"});
+  if (T.bgMode === "gradient") {
+    F(g, {t: "T", k: "bgColor2", type: "color", label: "Цвет 2"});
+    F(g, {t: "T", k: "bgAngle", type: "range", min: 0, max: 360, label: "Угол градиента"});
+  }
+  F(g, {t: "S", k: "bgOpacity", type: "range", min: 0, max: 1, step: 0.01, wide: 1, label: "Непрозрачность"});
+  F(g, {t: "S", k: "radius", type: "range", min: 0, max: 60, wide: 1, label: "Скругление углов, px"});
+  sec(p, "Контур");
+  const g2 = grid(p);
+  F(g2, {t: "T", k: "borderW", type: "range", min: 0, max: 20, wide: 1, label: "Толщина, px (0 = нет)"});
+  F(g2, {t: "T", k: "borderMode", type: "select", rebuild: true, label: "Цвет контура", opts: [["solid", "Один цвет"], ["gradient", "Градиент"]]});
+  F(g2, {t: "T", k: "borderColor", type: "color", label: T.borderMode === "gradient" ? "Цвет 1" : "Цвет"});
+  if (T.borderMode === "gradient") {
+    F(g2, {t: "T", k: "borderColor2", type: "color", label: "Цвет 2"});
+    F(g2, {t: "T", k: "borderAngle", type: "range", min: 0, max: 360, label: "Угол"});
+  }
+  F(g2, {t: "T", k: "borderAlpha", type: "range", min: 0, max: 100, wide: 1, label: "Непрозрачность контура, %"});
+}
+
+function pngBlock(p) {
+  sec(p, "PNG-картинка");
+  const row = E("div", "row");
+  const sel1 = E("select"); sel1.add(new Option("— не выбрана —", ""));
+  for (const n of assets.skins) sel1.add(new Option(n, n));
+  sel1.value = S.skin || ""; sel1.style.flex = "1";
+  sel1.onchange = async () => {
+    S.skin = sel1.value; pendS.skin = S.skin;
+    if (S.skin) await autoSlice(true);
+    render(); schedule(); buildPanel();
+  };
+  const up = E("button", "sm", "＋ Загрузить");
+  up.onclick = () => pickFiles(false, async files => {
+    const names = await uploadFiles("skins", files);
+    if (names.length) { S.skin = names[0]; pendS.skin = S.skin; T.base = "png"; dirtyT = true; await autoSlice(true); }
+    render(); schedule(); buildPanel();
+  });
+  const del = E("button", "sm", "✕");
+  del.title = "Удалить файл"; del.onclick = async () => {
+    if (!S.skin || !confirm("Удалить файл " + S.skin + "?")) return;
+    const name = S.skin;
+    await api(`/api/asset/skins/${encodeURIComponent(name)}`, {method: "DELETE"}).catch(e => toast(e.message));
+    assets.skins = assets.skins.filter(x => x !== name); S.skin = ""; delete pendS.skin; render(); buildPanel();
+  };
+  row.append(sel1, up, del); p.append(row);
+  if (!S.skin) { hint(p, "Загрузи PNG: нарезка подберётся автоматически. Декор (звёзды, висюльки) лучше загрузить отдельно на вкладке «Декор» и расставить вручную."); return; }
+
+  const g = grid(p);
+  F(g, {t: "S", k: "skinMode", type: "select", wide: 1, rebuild: true, label: "Как рисовать картинку", opts: [
+    ["slice", "9-slice: рамка подгоняется под размер шрифта"],
+    ["native", "9-slice 1:1: рамка в натуральном размере"],
+    ["stretch", "Растянуть целиком"],
+    ["cover", "Заполнить без искажений (с обрезкой)"]]});
+  if (S.skinMode === "slice" || S.skinMode === "native") {
+    hint(p, "Красные линии: края картинки (углы, рамка, прозрачные поля) остаются как есть, а середина между линиями растягивается под текст. Тяни линии мышкой.");
+    slicer(p);
+    const g2 = grid(p);
+    F(g2, {t: "S", k: "slT", type: "num", min: 0, label: "Сверху, px"});
+    F(g2, {t: "S", k: "slB", type: "num", min: 0, label: "Снизу, px"});
+    F(g2, {t: "S", k: "slL", type: "num", min: 0, label: "Слева, px"});
+    F(g2, {t: "S", k: "slR", type: "num", min: 0, label: "Справа, px"});
+    if (S.skinMode === "slice") F(g2, {t: "S", k: "skinScale", type: "range", min: 0.1, max: 3, step: 0.05, wide: 1, label: "Масштаб рамки"});
+    const b = E("button", "", "Авто-нарезка по PNG"); b.onclick = async () => { await autoSlice(false); render(); schedule(); buildPanel(); };
+    p.append(b);
+    hint(p, "Если рамка получилась слишком толстой: уменьши масштаб рамки или нарезку. Текст в 1:1 подгоняется масштабом на вкладке «Текст».");
+  }
+}
+
+function slicer(p) {
+  const wrap = E("div", "slicer"), img = new Image();
+  img.src = "/files/skins/" + encodeURIComponent(S.skin);
+  wrap.append(img);
+  const ln = {};
+  for (const k of ["slT", "slB", "slL", "slR"]) { const l = E("div", "ln " + (k === "slT" || k === "slB" ? "h" : "v")); l.dataset.k = k; wrap.append(l); ln[k] = l; }
+  const z = () => img.clientWidth / (img.naturalWidth || 1);
+  const place = () => {
+    const k = z(), W = img.naturalWidth, H = img.naturalHeight;
+    ln.slL.style.left = S.slL * k + "px"; ln.slR.style.left = (W - S.slR) * k + "px";
+    ln.slT.style.top = S.slT * k + "px"; ln.slB.style.top = (H - S.slB) * k + "px";
+  };
+  img.addEventListener("load", place); if (img.complete) place();
+  let act = null;
+  wrap.addEventListener("pointerdown", e => { const l = e.target.closest(".ln"); if (!l) return; act = l.dataset.k; wrap.setPointerCapture(e.pointerId); e.preventDefault(); });
+  wrap.addEventListener("pointermove", e => {
+    if (!act) return;
+    const r = img.getBoundingClientRect(), k = z(), W = img.naturalWidth, H = img.naturalHeight;
+    const x = (e.clientX - r.left) / k, y = (e.clientY - r.top) / k;
+    const v = {slL: x, slR: W - x, slT: y, slB: H - y}[act];
+    const lim = act === "slL" || act === "slR" ? W - 2 - S[act === "slL" ? "slR" : "slL"] : H - 2 - S[act === "slT" ? "slB" : "slT"];
+    S[act] = Math.max(0, Math.min(Math.round(v), lim));
+    const inp = document.querySelector(`#panel input[data-k="${act}"]`); if (inp) inp.value = S[act];
+    place(); touch("S", act);
+  });
+  const stop = () => { act = null; };
+  wrap.addEventListener("pointerup", stop); wrap.addEventListener("pointercancel", stop);
+  p.append(wrap);
+}
+
+// Авто-нарезка 9-slice: ищем от центра наибольшую однородную полосу по X и по Y (её можно растягивать).
+async function autoSlice(silent) {
+  if (!S.skin) { if (!silent) toast("Сначала выбери PNG"); return; }
+  const img = new Image();
+  img.src = "/files/skins/" + encodeURIComponent(S.skin);
+  try { await img.decode(); } catch (_) { if (!silent) toast("Не удалось прочитать картинку"); return; }
+  const W = img.naturalWidth, H = img.naturalHeight;
+  T.base = "png"; dirtyT = true;
+  if (W < 12 || H < 12) return;
+  const k = Math.min(1, 400 / Math.max(W, H));
+  const w = Math.max(12, Math.round(W * k)), h = Math.max(12, Math.round(H * k));
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d", {willReadFrequently: true});
+  g.drawImage(img, 0, 0, w, h);
+  const d = g.getImageData(0, 0, w, h).data;
+  const v = (i, ch) => ch < 3 ? d[i + ch] * d[i + 3] / 255 : d[i + 3];
+  const diff = (i, j) => Math.abs(v(i,0)-v(j,0)) + Math.abs(v(i,1)-v(j,1)) + Math.abs(v(i,2)-v(j,2)) + Math.abs(v(i,3)-v(j,3));
+  const cx = w >> 1, cy = h >> 1, TOL = 12;
+  const colDiff = x => { let s = 0; for (let y = 0; y < h; y++) s += diff((y*w+x)*4, (y*w+cx)*4); return s / h / 4; };
+  const rowDiff = y => { let s = 0; for (let x = 0; x < w; x++) s += diff((y*w+x)*4, (cy*w+x)*4); return s / w / 4; };
+  let l = cx; while (l > 0 && colDiff(l - 1) < TOL) l--;
+  let r = cx; while (r < w - 1 && colDiff(r + 1) < TOL) r++;
+  let t = cy; while (t > 0 && rowDiff(t - 1) < TOL) t--;
+  let b = cy; while (b < h - 1 && rowDiff(b + 1) < TOL) b++;
+  const set = o => { Object.assign(S, o); for (const x of Object.keys(o)) pendS[x] = S[x]; };
+  if (r - l + 1 < w * 0.08 || b - t + 1 < h * 0.08) {
+    set({skinMode: "cover"});
+    if (!silent) toast("В этом PNG нет однородной середины: включён режим «Заполнить без искажений».", true);
+    return;
+  }
+  const lim = (px, n) => Math.max(4, Math.min(Math.round(px / k), (n >> 1) - 2));
+  const sl = {slL: lim(l, W), slR: lim(w - 1 - r, W), slT: lim(t, H), slB: lim(h - 1 - b, H)};
+  const big = Math.max(sl.slL, sl.slR, sl.slT, sl.slB);
+  const native = S.skinMode === "native";
+  const scale = native ? 1 : Math.max(0.1, Math.min(1, +((S.fontSize || 28) * 1.1 / big).toFixed(2)));
+  set({...sl, skinScale: scale, skinMode: native ? "native" : "slice"});
+  if (!silent) toast(`Нарезка: сверху ${sl.slT}, снизу ${sl.slB}, слева ${sl.slL}, справа ${sl.slR}, масштаб ${scale}`, true);
+}
+
+/* ===== Градиент ===== */
+function panelGrad(p) {
+  hint(p, "Градиент накладывается поверх подложки (и поверх PNG, не выходя за его форму). Для оттенка поставь небольшую непрозрачность.");
+  const g = grid(p);
+  F(g, {t: "T", k: "gradOn", type: "check", label: "Включить градиент поверх подложки"});
+  F(g, {t: "T", k: "gradC1", type: "color", label: "Цвет 1"});
+  F(g, {t: "T", k: "gradC2", type: "color", label: "Цвет 2"});
+  F(g, {t: "T", k: "gradAngle", type: "range", min: 0, max: 360, wide: 1, label: "Угол"});
+  F(g, {t: "T", k: "gradAlpha", type: "range", min: 0, max: 100, wide: 1, label: "Непрозрачность, %"});
+}
+
+/* ===== Текст ===== */
+function panelText(p) {
+  sec(p, "Положение текста внутри рамки");
+  hint(p, "Отступы двигают текст внутри подложки: увеличь левый и верхний, чтобы сместить текст от декора на краях.");
+  const g = grid(p);
+  F(g, {t: "S", k: "padT", type: "num", min: 0, label: "Сверху, px"});
+  F(g, {t: "S", k: "padB", type: "num", min: 0, label: "Снизу, px"});
+  F(g, {t: "S", k: "padL", type: "num", min: 0, label: "Слева, px"});
+  F(g, {t: "S", k: "padR", type: "num", min: 0, label: "Справа, px"});
+  F(g, {t: "T", k: "textAlign", type: "select", label: "Выравнивание", opts: [["left", "Слева"], ["center", "По центру"], ["right", "Справа"]]});
+  F(g, {t: "T", k: "layout", type: "select", label: "Ник", opts: [["inline", "В одной строке с текстом"], ["stacked", "Отдельной строкой сверху"]]});
+  sec(p, "Размер сообщения");
+  const g2 = grid(p);
+  F(g2, {t: "T", k: "maxW", type: "range", min: 20, max: 100, wide: 1, label: "Макс. ширина, % области"});
+  F(g2, {t: "T", k: "minW", type: "num", min: 0, label: "Мин. ширина, px"});
+  F(g2, {t: "S", k: "gap", type: "range", min: 0, max: 80, wide: 1, label: "Расстояние между сообщениями, px"});
+  F(g2, {t: "S", k: "uiScale", type: "range", min: 50, max: 200, step: 5, wide: 1, label: "Масштаб всего чата на экране, % (виден в OBS)"});
+  sec(p, "Шрифт");
+  const g3 = grid(p);
+  const fl = E("label", "wide"); fl.append(E("span", "cap", "Гарнитура (готовые системные или свой файл)"));
+  const fsel = E("select"), og1 = document.createElement("optgroup"); og1.label = "Готовые шрифты";
+  for (const f of BK.FONT_BASES) { const o = new Option(f, "base:" + f); o.style.fontFamily = `"${f}"`; og1.append(o); }
+  fsel.append(og1);
+  if (assets.fonts.length) { const og2 = document.createElement("optgroup"); og2.label = "Свои файлы";
+    for (const n of assets.fonts) og2.append(new Option(n.replace(/\.[^.]+$/, ""), "file:" + n)); fsel.append(og2); }
+  fsel.value = S.font ? "file:" + S.font : "base:" + (S.fontBase || "Segoe UI");
+  fsel.onchange = () => {
+    const v = fsel.value;
+    if (v.startsWith("file:")) { S.font = v.slice(5); touch("S", "font"); }
+    else { S.font = ""; S.fontBase = v.slice(5); touch("S", "font"); touch("S", "fontBase"); }
+  };
+  fl.append(fsel); g3.append(fl);
+  F(g3, {t: "S", k: "fontWeight", type: "range", min: 100, max: 900, step: 100, wide: 1, label: "Толщина текста (100 тонкий … 900 чёрный)"});
+  F(g3, {t: "S", k: "nameWeight", type: "range", min: 100, max: 900, step: 100, wide: 1, label: "Толщина ника"});
+  F(g3, {t: "S", k: "textScale", type: "range", min: 30, max: 150, step: 5, wide: 1, label: "Масштаб текста и смайлов, %"});
+  F(g3, {t: "S", k: "fontSize", type: "num", min: 8, max: 200, label: "Размер, px"});
+  F(g3, {t: "S", k: "textColor", type: "color", label: "Цвет текста"});
+  F(g3, {t: "S", k: "shadow", type: "check", label: "Тень текста"});
+  hint(p, "Свой шрифт загружается в окне программы (вкладка «Вид» → «Шрифт»). Не все шрифты имеют все начертания: если толщина не меняется, у шрифта нет такого варианта.");
+  sec(p, "Значки у ника");
+  const g4 = grid(p);
+  F(g4, {t: "S", k: "badges", type: "check", label: "Показывать значки Twitch (стример, модератор, главный модератор)"});
+  F(g4, {t: "S", k: "bdB", type: "check", label: "Стример"});
+  F(g4, {t: "S", k: "bdM", type: "check", label: "Модератор"});
+  F(g4, {t: "S", k: "bdL", type: "check", label: "Главный модератор"});
+  hint(p, "Для отдельного ника значки можно скрыть или выдать вручную: окно программы → «Ники».");
+}
+
+/* ===== Декор ===== */
+const curItem = () => T.decor.find(d => d.id === sel);
+function addDecor(o) {
+  const it = {...DECOR_DEF, w: o.kind === "image" ? 56 : 34, ...o, id: uid()};
+  T.decor.push(it); sel = it.id; dirtyT = true; render(); buildPanel(); schedule();
+}
+function pickFiles(multi, cb) {
+  const inp = E("input"); inp.type = "file"; inp.accept = "image/png,image/webp,image/gif"; inp.multiple = !!multi;
+  inp.onchange = () => { if (inp.files.length) cb([...inp.files]); };
+  inp.click();
+}
+async function uploadFiles(kind, files) {
+  const names = [];
+  for (const f of files) {
+    const fd = new FormData(); fd.append("file", f);
+    try { const r = await api("/api/upload/" + kind, {method: "POST", body: fd}); assets[kind].push(r.name); names.push(r.name); }
+    catch (e) { toast(f.name + ": " + e.message); }
+  }
+  return names;
+}
+function panelDecor(p) {
+  hint(p, "Декор: звёзды, висюльки, цветы и любые картинки. Загрузи PNG/WebP/GIF и тащи элементы мышкой прямо в примере справа. Позиция привязана к ближайшему углу, краю или центру сообщения, поэтому декор «держится» за свой угол, когда сообщение становится длиннее.");
+  sec(p, "Мои картинки");
+  const lib = E("div", "lib");
+  for (const n of assets.decor) {
+    const t = E("div", "thumb"), im = new Image(); im.src = "/files/decor/" + encodeURIComponent(n); im.title = n + ": добавить";
+    const x = E("button", "x", "✕"); x.title = "Удалить файл";
+    x.onclick = async e => {
+      e.stopPropagation(); if (!confirm("Удалить файл " + n + "?")) return;
+      await api(`/api/asset/decor/${encodeURIComponent(n)}`, {method: "DELETE"}).catch(er => toast(er.message));
+      assets.decor = assets.decor.filter(a => a !== n); T.decor = T.decor.filter(d => d.file !== n);
+      if (!curItem()) sel = null; render(); buildPanel();
+    };
+    t.onclick = () => addDecor({kind: "image", file: n});
+    t.append(im, x); lib.append(t);
+  }
+  p.append(lib);
+  const up = E("button", "pri", "＋ Загрузить картинки");
+  up.onclick = () => pickFiles(true, async files => { await uploadFiles("decor", files); buildPanel(); });
+  p.append(up);
+  sec(p, "Символы и эмодзи");
+  const gl = E("div", "glyphs");
+  for (const gch of BK.GLYPHS) { const b = E("button", "", gch); b.onclick = () => addDecor({kind: "glyph", glyph: gch}); gl.append(b); }
+  p.append(gl);
+  const row = E("div", "row"), gi = E("input"); gi.type = "text"; gi.placeholder = "свой символ или эмодзи"; gi.maxLength = 12; gi.style.flex = "1";
+  const gb = E("button", "sm", "Добавить"); gb.onclick = () => { if (gi.value.trim()) addDecor({kind: "glyph", glyph: gi.value.trim()}); };
+  row.append(gi, gb); p.append(row);
+
+  sec(p, "Элементы на сообщении");
+  const items = E("div", "items");
+  T.decor.forEach((d, i) => {
+    const it = E("div", "item" + (d.id === sel ? " on" : ""));
+    const ic = E("div", "ic");
+    if (d.kind === "glyph") { ic.textContent = d.glyph; ic.style.color = d.color; } else { const im = new Image(); im.src = "/files/decor/" + encodeURIComponent(d.file); ic.append(im); }
+    const nm = E("span", "nm", d.kind === "glyph" ? "Символ " + d.glyph : d.file);
+    const mk = (t, title, fn) => { const b = E("button", "sm", t); b.title = title; b.onclick = e => { e.stopPropagation(); fn(); }; return b; };
+    const change = () => { dirtyT = true; render(); buildPanel(); schedule(); };
+    it.append(ic, nm,
+      mk("↑", "Выше (рисуется позже)", () => { if (i < T.decor.length - 1) { [T.decor[i], T.decor[i + 1]] = [T.decor[i + 1], T.decor[i]]; change(); } }),
+      mk("↓", "Ниже", () => { if (i > 0) { [T.decor[i], T.decor[i - 1]] = [T.decor[i - 1], T.decor[i]]; change(); } }),
+      mk("⧉", "Дублировать", () => { const c = {...d, id: uid(), ox: d.ox + 14, oy: d.oy + 14}; T.decor.splice(i + 1, 0, c); sel = c.id; change(); }),
+      mk("✕", "Удалить", () => { T.decor.splice(i, 1); if (sel === d.id) sel = null; change(); }));
+    it.onclick = () => { sel = d.id; render(); buildPanel(); };
+    items.append(it);
+  });
+  if (!T.decor.length) items.append(E("div", "hint", "Пока пусто: добавь картинку или символ выше."));
+  p.append(items);
+
+  const it = curItem();
+  if (it) {
+    sec(p, "Выбранный элемент");
+    const g = grid(p);
+    if (it.kind === "glyph") {
+      F(g, {t: it, k: "glyph", type: "text", label: "Символ"});
+      F(g, {t: it, k: "color", type: "color", label: "Цвет"});
+    } else {
+      const fl = E("label", "wide"); fl.append(E("span", "cap", "Файл"));
+      const s = E("select"); for (const n of assets.decor) s.add(new Option(n, n)); s.value = it.file;
+      s.onchange = () => { it.file = s.value; touch("T", "file"); buildPanel(); };
+      fl.append(s); g.append(fl);
+    }
+    F(g, {t: it, k: "w", type: "range", min: 6, max: 300, wide: 1, label: it.kind === "glyph" ? "Размер, px" : "Ширина, px"});
+    F(g, {t: it, k: "rot", type: "range", min: -180, max: 180, label: "Поворот, °"});
+    F(g, {t: it, k: "op", type: "range", min: 0, max: 100, label: "Непрозрачность, %"});
+    F(g, {t: it, k: "flip", type: "check", label: "Отразить по горизонтали"});
+    F(g, {t: it, k: "layer", type: "select", label: "Слой", opts: [["front", "Перед текстом"], ["back", "Под текстом, над подложкой"], ["under", "Под подложкой"]]});
+    F(g, {t: it, k: "anim", type: "select", label: "Анимация", opts: [["none", "Нет"], ["float", "Парение"], ["swing", "Покачивание"], ["pulse", "Пульсация"], ["spin", "Вращение"], ["blink", "Мигание"]]});
+    F(g, {t: it, k: "ox", type: "num", label: "Смещение X, px"});
+    F(g, {t: it, k: "oy", type: "num", label: "Смещение Y, px"});
+    const al = E("div", "wide"); al.append(E("div", "hint", "Привязка к месту сообщения (клик сбрасывает смещение):"));
+    const an = E("div", "anchor");
+    for (const ay of [0, 50, 100]) for (const ax of [0, 50, 100]) {
+      const b = E("button", "an" + (it.ax === ax && it.ay === ay ? " on" : ""));
+      b.onclick = () => { it.ax = ax; it.ay = ay; it.ox = 0; it.oy = 0; dirtyT = true; render(); buildPanel(); schedule(); };
+      an.append(b);
+    }
+    al.append(an); g.append(al);
+    hint(p, "Стрелки на клавиатуре двигают выбранный элемент на 1 px (Shift: на 10), Delete удаляет.");
+  }
+  sec(p, "Общие настройки декора");
+  const g2 = grid(p);
+  F(g2, {t: "T", k: "decorScale", type: "range", min: 20, max: 300, step: 5, wide: 1, label: "Масштаб всего декора, %"});
+  F(g2, {t: "S", k: "perf", type: "select", wide: 1, label: "Оптимизация (анимации декора работают только в «Максимум»)",
+         opts: [["eco", "Эконом"], ["balanced", "Баланс"], ["full", "Максимум"]]});
+}
+
+/* ---------- перетаскивание декора в примере ---------- */
+let drag = null;
+function reanchor(it, msg) {            // после перетаскивания привязываем к ближайшей точке: углы, края, центр
+  const W = msg.offsetWidth, H = msg.offsetHeight, dsc = T.decorScale / 100;
+  const cx = it.ax / 100 * W + it.ox * dsc, cy = it.ay / 100 * H + it.oy * dsc;
+  const pick = (c, len) => [0, 50, 100].reduce((b, a) => Math.abs(c - a / 100 * len) < Math.abs(c - b / 100 * len) ? a : b, 0);
+  const nax = pick(cx, W), nay = pick(cy, H);
+  it.ox = Math.round((cx - nax / 100 * W) / dsc); it.oy = Math.round((cy - nay / 100 * H) / dsc);
+  it.ax = nax; it.ay = nay;
+}
+pv.addEventListener("pointerdown", e => {
+  const dc = e.target.closest(".dc.edit");
+  if (!dc || e.button !== 0) return;
+  const it = T.decor.find(d => d.id === dc.dataset.id); if (!it) return;
+  e.preventDefault(); pv.setPointerCapture(e.pointerId);
+  sel = it.id;
+  pv.querySelectorAll(".dc.edit").forEach(w => w.classList.toggle("sel", w.dataset.id === sel));
+  drag = {it, x: e.clientX, y: e.clientY, ox: it.ox, oy: it.oy, msg: dc.closest(".msg"), moved: false};
+});
+pv.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const dsc = T.decorScale / 100;
+  drag.it.ox = Math.round(drag.ox + (e.clientX - drag.x) / dsc);
+  drag.it.oy = Math.round(drag.oy + (e.clientY - drag.y) / dsc);
+  drag.moved = true;
+  pv.querySelectorAll(`.dc[data-id="${drag.it.id}"]`).forEach(w => BK.setDecorVars(w, drag.it));
+  dirtyT = true; schedule();
+});
+function endDrag() {
+  if (!drag) return;
+  const d = drag; drag = null;
+  if (d.moved && d.msg.isConnected) reanchor(d.it, d.msg);
+  render(); buildPanel();
+}
+pv.addEventListener("pointerup", endDrag); pv.addEventListener("pointercancel", endDrag);
+document.addEventListener("keydown", e => {
+  if (tab !== "decor" || !sel || e.target.closest("input,select,textarea")) return;
+  const it = curItem(); if (!it) return;
+  const st = e.shiftKey ? 10 : 1;
+  if (e.key === "ArrowLeft") it.ox -= st; else if (e.key === "ArrowRight") it.ox += st;
+  else if (e.key === "ArrowUp") it.oy -= st; else if (e.key === "ArrowDown") it.oy += st;
+  else if (e.key === "Delete") { T.decor = T.decor.filter(d => d !== it); sel = null; }
+  else return;
+  e.preventDefault(); dirtyT = true; render(); buildPanel(); schedule();
+});
+
+/* ---------- старт ---------- */
+(async () => {
+  try {
+    const c = await api("/api/config");
+    S = c.style; T = Object.assign(BK.defaultTheme(), c.theme || {}); users = c.users || {};
+    if (window.AppTheme && c.app) AppTheme.sync(c.app.theme);
+    assets = Object.assign({skins: [], fonts: [], decor: []}, c.assets);
+    sel = T.decor.length ? T.decor[0].id : null;
+    $("saved").textContent = "сохранено";
+  } catch (e) { toast("Не удалось загрузить настройки: " + e.message); }
+  buildTabs(); buildPanel(); render();
+})();
+</script>
+</body>
+</html>

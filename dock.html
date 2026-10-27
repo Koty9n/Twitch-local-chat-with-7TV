@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Twitch chat 7TV</title>
+<link rel="icon" href="/icon.png">
+<script src="/theme.js"></script>
+<link rel="stylesheet" href="/theme.css">
+<style>
+body{padding:12px}
+header{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+#pill{padding:3px 11px;border-radius:99px;background:var(--btn);font-weight:600;font-size:12px;white-space:nowrap}
+#pill.connected{background:var(--ok);color:#fff}#pill.error{background:var(--err);color:#fff}
+#pill.connecting,#pill.reconnecting{background:var(--warn);color:#111}
+#info{color:var(--faint);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btns{display:flex;gap:8px;margin-bottom:14px}
+.btns button{flex:1;white-space:nowrap;padding:9px 6px}
+</style>
+</head>
+<body>
+<header><span id="pill">…</span><span id="info"></span></header>
+<div class="btns">
+  <button class="pri" id="bTest">▶ Тест</button>
+  <button id="bClear">Очистить</button>
+  <button id="bApp" title="Открыть окно программы: все настройки, конструктор, журнал">⚙ Программа</button>
+</div>
+<div id="quick"></div>
+<div id="toast"></div>
+<script src="/quick.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const api = async (url, opt = {}) => {
+  const r = await fetch(url, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+};
+const post = (url, body) => api(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+function toast(msg, ok) {
+  const t = $("toast"); t.textContent = msg; t.style.background = ok ? "#1f7a3d" : "#a02a2a"; t.style.display = "block";
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", ok ? 3000 : 4500);
+}
+
+async function refreshStatus() {
+  try {
+    const s = await api("/api/status");
+    const names = {idle: "не подключено", connecting: "подключение…", connected: "в сети", reconnecting: "переподключение…", error: "ошибка"};
+    $("pill").textContent = names[s.state] || s.state; $("pill").className = s.state;
+    $("info").textContent = [s.channel && "#" + s.channel, s.state === "error" ? s.detail : ""].filter(Boolean).join(" · ");
+  } catch (_) { $("pill").textContent = "программа не запущена"; $("pill").className = "error"; }
+}
+
+$("bTest").onclick = () => post("/api/test").catch(e => toast(e.message));
+$("bClear").onclick = () => post("/api/clear").catch(e => toast(e.message));
+$("bApp").onclick = () => post("/api/open-app").catch(e => toast(e.message));
+
+Quick.mount($("quick"), {toast});
+refreshStatus();
+// пока док скрыт, сервер не опрашиваем; раз в несколько секунд подтягиваем изменения, сделанные в программе
+setInterval(() => { if (!document.hidden) { refreshStatus(); if (!document.activeElement || document.activeElement.tagName === "BODY") Quick.load().catch(() => {}); } }, 4000);
+</script>
+</body>
+</html>

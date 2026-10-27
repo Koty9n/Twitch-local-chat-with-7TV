@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Twitch chat 7TV</title>
+<link rel="icon" href="/icon.png">
+<script src="/theme.js"></script>
+<link rel="stylesheet" href="/theme.css">
+<style>
+body{height:100vh;display:flex;flex-direction:column;overflow:hidden}
+#top{display:flex;align-items:center;gap:10px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+#top img{border-radius:6px}
+#top .sp{flex:1}
+#ttl{font-size:15px;font-weight:700;letter-spacing:.01em}
+#pill{padding:3px 11px;border-radius:99px;background:var(--btn);font-weight:600;font-size:12px;white-space:nowrap}
+#pill.connected{background:var(--ok);color:#fff}#pill.error{background:var(--err);color:#fff}
+#pill.connecting,#pill.reconnecting{background:var(--warn);color:#111}
+#info{color:var(--faint);font-size:12px;max-width:28vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#bSet{position:relative}
+#updDot{position:absolute;top:-4px;right:-4px;width:11px;height:11px;border-radius:50%;background:var(--warn);border:2px solid var(--panel)}
+
+#app{flex:1;min-height:0;display:grid;grid-template-columns:minmax(420px,500px) 1fr}
+#left{display:flex;flex-direction:column;min-height:0;background:var(--panel);border-right:1px solid var(--line)}
+#left>.tabs{margin:16px 18px 0}
+#left>.tabs button{padding:8px 8px;font-size:13px}
+#panes{flex:1;overflow-y:auto;padding:18px}
+.pane[hidden],.spane[hidden]{display:none}
+#right{display:flex;flex-direction:column;gap:12px;padding:16px 20px;min-width:0}
+.pvbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pvbar .ttl{font-weight:700;margin-right:auto}
+.pvbar label.chk{font-size:12px;color:var(--muted)}
+#prev{flex:1;width:100%;border:1px solid var(--line);border-radius:14px;display:block;background:#0b0b0d}
+@media (max-width:899px){
+  body{height:auto;overflow:auto}
+  #app{display:block}
+  #left{border-right:0}
+  #right{padding:12px 14px;height:340px}
+  #panes{overflow:visible}
+}
+.sub{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:2px 0 -4px}
+
+.ucard{border:1px solid var(--line);border-radius:12px;background:var(--card2);margin-top:10px}
+.ucard>summary{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;list-style:none;user-select:none}
+.ucard>summary::-webkit-details-marker{display:none}
+.ucard>summary::before{content:"▸";color:var(--faint);transition:transform .15s}
+.ucard[open]>summary::before{transform:rotate(90deg)}
+.ucard>summary b{flex:1;font-size:14px}
+.ucard .ub{padding:2px 14px 16px;display:flex;flex-direction:column;gap:14px}
+.opt{display:flex;gap:6px}.opt input{flex:1}
+.opt input.emptyc{opacity:.35}
+pre#log{margin:0 0 10px;height:calc(100vh - 290px);min-height:220px;overflow:auto;background:var(--input);border:1px solid var(--line);border-radius:10px;padding:10px;font:12px/1.5 Consolas,monospace;white-space:pre-wrap;word-break:break-all}
+
+dialog .dh{display:flex;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);z-index:2}
+dialog .dh b{flex:1;font-size:15px}dialog .db{padding:16px 20px 22px}
+dialog .tabs{margin-bottom:16px}
+dialog .f{gap:14px}
+#updMsg{font-size:13px;color:var(--muted);white-space:pre-wrap}
+#diag{color:var(--muted);white-space:pre-wrap;line-height:1.6;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+#vInfo{color:var(--muted)}
+.tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tcard{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 8px;border:2px solid var(--line);border-radius:12px;background:var(--card2);color:var(--text)}
+.tcard.on{border-color:var(--accent);background:var(--accent-soft)}
+.tcard i{display:block;width:100%;height:46px;border-radius:8px;border:1px solid var(--line)}
+.tcard .td{background:linear-gradient(135deg,#0e0f12 0 55%,#9146ff 55%)}
+.tcard .tl{background:linear-gradient(135deg,#f7f8fb 0 55%,#7a3df0 55%)}
+.tcard .ta{background:linear-gradient(135deg,#0e0f12 0 50%,#f7f8fb 50%)}
+</style>
+</head>
+<body>
+<header id="top">
+  <img src="/icon.png" alt="" width="28" height="28"><span id="ttl">Twitch chat 7TV</span>
+  <span id="pill">…</span><span id="info"></span>
+  <span class="sp"></span>
+  <button id="bLinks" title="Адреса для OBS">🔗 Ссылки для OBS</button>
+  <button id="bSet" title="Канал, токен, производительность, запуск, обновления, тема">⚙ Настройки<i id="updDot" hidden></i></button>
+  <button id="bQuit" class="danger" title="Полностью закрыть программу (чат в OBS перестанет работать)">⏻ Выход</button>
+</header>
+<div id="app">
+<section id="left">
+  <nav class="tabs" id="tabs">
+    <button data-tab="quick" class="on">Быстро</button>
+    <button data-tab="look">Вид</button>
+    <button data-tab="anim">Анимации</button>
+    <button data-tab="users">Ники</button>
+    <button data-tab="filters">Фильтры</button>
+    <button data-tab="log">Журнал</button>
+  </nav>
+  <div id="panes">
+    <div class="pane" id="tab-quick"><div id="quick"></div></div>
+    <div class="pane" id="tab-look" hidden></div>
+    <div class="pane" id="tab-anim" hidden></div>
+    <div class="pane" id="tab-users" hidden>
+      <div class="card"><h4>Эффекты ников</h4>
+        <div class="hint" style="margin-bottom:12px">Привяжи к нику градиент, свечение, префикс и значки. Кнопка ▶ в карточке покажет сообщение от этого ника в примере.</div>
+        <div class="asset"><input type="text" id="uAdd" placeholder="Ник на Twitch (например, streamer_name)" autocomplete="off"><button class="pri" id="bUAdd">Добавить</button></div>
+      </div>
+      <div id="ulist"></div>
+    </div>
+    <div class="pane" id="tab-filters" hidden></div>
+    <div class="pane" id="tab-log" hidden>
+      <pre id="log"></pre>
+      <div class="btns"><button id="bLogCopy">Скопировать</button><button id="bLogClear">Очистить вид</button></div>
+      <div class="hint" style="margin-top:10px">Полный журнал лежит в файле data\app.log. Если что-то не работает, пришли его последние строки.</div>
+    </div>
+  </div>
+</section>
+<section id="right">
+  <div class="pvbar">
+    <span class="ttl">Предпросмотр</span>
+    <button class="pri" id="bTest">▶ Тест</button>
+    <button id="bClear">Очистить</button>
+    <button id="bEmotes" title="Заново загрузить список 7TV-смайлов">Обновить смайлы</button>
+    <label class="chk"><input type="checkbox" id="auto"> Авто-примеры</label>
+  </div>
+  <iframe id="prev" src="/overlay?preview=1" title="preview"></iframe>
+  <div class="hint">Так чат выглядит в OBS. Размер области равен размеру этого окна.</div>
+</section>
+</div>
+
+<dialog id="dLinks"><div class="dh"><b>🔗 Ссылки для OBS</b><button class="ghost" data-close>✕</button></div><div class="db">
+  <div class="f">
+    <label class="wide">Browser Source: сам чат на сцене (источник «Браузер»)
+      <div class="asset"><input type="text" id="uOverlay" readonly onclick="this.select()"><button data-copy="uOverlay">Копировать</button></div></label>
+    <label class="wide">Custom Browser Dock: быстрые настройки внутри OBS (Док-панели → Пользовательские док-панели браузера)
+      <div class="asset"><input type="text" id="uDock" readonly onclick="this.select()"><button data-copy="uDock">Копировать</button></div></label>
+    <div class="hint">Размер источника «Браузер» делай под нужную область чата (например 600×900). Фон прозрачный, CSS вставлять не нужно.</div>
+  </div></div></dialog>
+
+<dialog id="dSet"><div class="dh"><b>⚙ Настройки</b><button class="ghost" data-close>✕</button></div><div class="db">
+  <nav class="tabs" id="sTabs">
+    <button data-s="tw" class="on">Twitch</button><button data-s="perf">Производительность</button><button data-s="run">Запуск</button><button data-s="upd">Обновления</button><button data-s="look">Оформление</button>
+  </nav>
+  <div class="spane" id="s-tw">
+    <div class="f">
+      <label class="wide">Канал Twitch<input type="text" id="channel" placeholder="nickname" autocomplete="off"></label>
+      <label>Ник аккаунта (для токена)<input type="text" id="nick" autocomplete="off"></label>
+      <label>OAuth-токен <span id="tokState"></span><input type="password" id="oauth" placeholder="необязательно" autocomplete="off"></label>
+      <div class="wide btns"><button class="pri" id="bConn">Сохранить и подключить</button><button id="bTokDel">Удалить токен</button></div>
+      <div class="hint">Для чтения чата токен не обязателен: без него подключение анонимное. Для токена укажи ник аккаунта и scope chat:read. Токен хранится в data/config.json открытым текстом, не показывай этот файл.</div>
+    </div>
+  </div>
+  <div class="spane" id="s-perf" hidden>
+    <div class="f">
+      <label class="wide">Оптимизация чата
+        <select id="sPerf"><option value="eco">Эконом: статичные смайлы, без бесконечных анимаций</option><option value="balanced">Баланс: смайлы анимированы, без бесконечных анимаций</option><option value="full">Максимум: всё включено</option></select></label>
+      <label class="chk wide"><input type="checkbox" id="sGuard"> Автозащита FPS: если чат подтормаживает, он сам упрощает эффекты</label>
+      <label>Макс. новых сообщений в секунду<input type="number" id="sRate" min="1" max="30"></label>
+      <label>Лимит кеша смайлов, МБ<input type="number" id="sCache" min="50" max="5000" step="50"></label>
+      <div class="hint">Во время рейда лишние сообщения отбрасываются. Старые смайлы удаляются при запуске, если кеш больше лимита.</div>
+      <label class="chk wide"><input type="checkbox" id="sIdle"> Останавливать пример в этом окне, когда оно не в фокусе</label>
+      <div class="hint">Для OBS: в свойствах источника «Браузер» поставь частоту кадров 30 или меньше, включи «Отключать источник, когда он не виден» и держи размер источника не больше нужной области чата.</div>
+      <div class="wide sub">Диагностика нагрузки</div>
+      <div class="wide" id="diag">Измеряю…</div>
+      <div class="hint">Чат в OBS отрисовывается внутри процесса OBS (obs-browser-page), его ищи в диспетчере задач. Эти цифры показывают, чем нагружен сам чат.</div>
+    </div>
+  </div>
+  <div class="spane" id="s-run" hidden>
+    <div class="f">
+      <label class="chk wide"><input type="checkbox" id="sAuto"> Запускать вместе с Windows (сразу в фоне, без окна)</label>
+      <div class="wide"><div class="hint" style="margin-bottom:6px">При закрытии окна программы</div>
+        <div class="seg" id="sClose"><button data-v="tray">Свернуть в трей</button><button data-v="quit">Закрыть программу</button></div></div>
+      <div class="hint" id="sCloseHint"></div>
+    </div>
+  </div>
+  <div class="spane" id="s-upd" hidden>
+    <div class="f">
+      <div class="wide" id="vInfo"></div>
+      <label class="wide">Источник обновлений (GitHub: владелец/репозиторий, или https-ссылка на version.json)<input type="text" id="sSrc" placeholder="например: myname/twitch-chat-7tv" autocomplete="off"></label>
+      <label class="chk wide"><input type="checkbox" id="sChk"> Проверять обновления при запуске</label>
+      <div class="wide btns"><button class="pri" id="bUpd">🔄 Проверить обновления</button><button id="bUpdGo" hidden>⬇ Установить</button></div>
+      <div class="wide" id="updMsg"></div>
+    </div>
+  </div>
+  <div class="spane" id="s-look" hidden>
+    <div class="hint" style="margin-bottom:10px">Тема окна программы, дока и конструктора. На сам чат в OBS она не влияет.</div>
+    <div class="tgrid" id="themeGrid">
+      <button class="tcard" data-th="dark"><i class="td"></i>Тёмная</button>
+      <button class="tcard" data-th="light"><i class="tl"></i>Светлая</button>
+      <button class="tcard" data-th="auto"><i class="ta"></i>Как в системе</button>
+    </div>
+  </div>
+</div></dialog>
+<script src="/quick.js"></script>
+<input type="file" id="file" hidden>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const api = async (url, opt = {}) => {
+  const r = await fetch(url, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+};
+const post = (url, body) => api(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+function toast(msg, ok) {
+  const t = $("toast"); t.textContent = msg; t.style.background = ok ? "#1f7a3d" : "#a02a2a"; t.style.display = "block";
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", ok ? 6000 : 4000);
+}
+
+const ANIM_IN = [["slide","Выезд сбоку"],["up","Снизу вверх"],["pop","Pop"],["bounce","Bounce"],["fade","Плавное появление"],["blur","Blur"],["flip","Flip"],["wipe","Проявление слева"],["none","Без анимации"]];
+const ANIM_OUT = [["fade","Затухание"],["slide","Уезжает"],["shrink","Сжатие"],["none","Мгновенно"]];
+
+const SECTIONS = [
+  {tab: "look", t: "Дизайн сообщения", f: [
+    {type: "btn", label: "🎨 Открыть конструктор чата", act: () => openEditor(), pri: 1},
+    {hint: "Готовые рамки, своя PNG-подложка, градиент, положение текста и декор, который расставляется мышкой. Изменения сразу видны в OBS."},
+  ]},
+  {tab: "look", t: "Шрифт", f: [
+    {k: "font", type: "fontpick", label: "Гарнитура: готовые шрифты Windows или свой файл (ttf / otf / woff2)", wide: 1},
+    {k: "fontSize", type: "num", label: "Размер, px"},
+    {k: "textScale", type: "range", min: 30, max: 150, step: 5, label: "Масштаб текста и смайлов, %"},
+    {k: "fontWeight", type: "range", min: 100, max: 900, step: 100, label: "Толщина текста (100 тонкий … 900 чёрный)", wide: 1},
+    {k: "nameWeight", type: "range", min: 100, max: 900, step: 100, label: "Толщина ника", wide: 1},
+    {k: "shadow", type: "check", label: "Тень текста"},
+  ]},
+  {tab: "look", t: "Цвета и смайлы", f: [
+    {k: "textColor", type: "color", label: "Цвет текста"},
+    {k: "nameMode", type: "select", label: "Цвет ника", opts: [["twitch","Из Twitch"],["fixed","Свой"]]},
+    {k: "nameColor", type: "color", label: "Свой цвет ника"},
+    {k: "emoteScale", type: "num", step: .1, label: "Размер смайлов (×)"},
+  ]},
+  {tab: "look", t: "Значки у ника", f: [
+    {k: "badges", type: "check", label: "Показывать значки Twitch перед ником", wide: 1},
+    {k: "bdB", type: "check", label: "Стример", wide: 1},
+    {k: "bdM", type: "check", label: "Модератор", wide: 1},
+    {k: "bdL", type: "check", label: "Главный модератор", wide: 1},
+    {hint: "Для отдельного ника значки можно скрыть или выдать вручную: вкладка «Ники»."},
+  ]},
+  {tab: "anim", t: "Появление и исчезновение", f: [
+    {k: "animIn", type: "select", label: "Появление", opts: ANIM_IN}, {k: "animOut", type: "select", label: "Исчезновение", opts: ANIM_OUT},
+    {k: "animMs", type: "num", step: 50, label: "Длительность, мс"}, {k: "lifetime", type: "num", label: "Жизнь сообщения, с (0 = вечно)"},
+  ]},
+  {tab: "anim", t: "Расположение", f: [
+    {k: "maxMessages", type: "num", label: "Макс. сообщений на экране"},
+    {k: "anchor", type: "select", label: "Прижать к", opts: [["bottom","Низу"],["top","Верху"]]},
+    {k: "align", type: "select", label: "Выравнивание", opts: [["left","Слева"],["right","Справа"]]},
+    {k: "gap", type: "range", min: 0, max: 80, label: "Расстояние между сообщениями, px", wide: 1},
+    {k: "uiScale", type: "range", min: 50, max: 200, step: 5, label: "Масштаб всего чата на экране, %", wide: 1},
+  ]},
+  {tab: "filters", t: "Смайлы", f: [
+    {k: "use7tv", type: "check", label: "7TV смайлы (с кешем)", wide: 1},
+    {k: "useTwitchEmotes", type: "check", label: "Смайлы Twitch", wide: 1},
+  ]},
+  {tab: "filters", t: "Фильтры сообщений", f: [
+    {k: "hideCommands", type: "check", label: "Скрывать команды (!…)", wide: 1},
+    {k: "ignoredUsers", type: "area", label: "Игнорировать ботов и ники (через запятую)", wide: 1},
+    {k: "blockedWords", type: "area", label: "Стоп-слова (через запятую)", wide: 1},
+  ]},
+];
+const FONT_BASES = ["Segoe UI", "Arial", "Arial Black", "Verdana", "Tahoma", "Trebuchet MS", "Calibri", "Georgia", "Times New Roman", "Palatino Linotype", "Courier New", "Consolas", "Impact", "Comic Sans MS"];
+
+let S = {}, assets = {skins: [], fonts: []}, saveTimer = 0, uploadKind = null;
+
+function build() {
+  for (const id of ["look", "anim", "filters"]) $("tab-" + id).textContent = "";
+  for (const sec of SECTIONS) {
+    const card = document.createElement("div"); card.className = "card";
+    const h = document.createElement("h4"); h.textContent = sec.t; card.appendChild(h);
+    const g = document.createElement("div"); g.className = "f"; card.appendChild(g);
+    for (const f of sec.f) {
+      if (f.hint) { const h2 = document.createElement("div"); h2.className = "hint"; h2.textContent = f.hint; g.appendChild(h2); continue; }
+      if (f.type === "btn") {
+        const w = document.createElement("div"); w.className = "wide";
+        const bt = mkBtn(f.label, f.act); if (f.pri) bt.className = "pri"; w.appendChild(bt); g.appendChild(w); continue;
+      }
+      const lab = document.createElement("label"); if (f.wide || f.type === "area") lab.className = "wide";
+      let inp;
+      if (f.type === "check") {
+        lab.className = "chk wide"; inp = document.createElement("input"); inp.type = "checkbox";
+        lab.append(inp, f.label);
+      } else {
+        lab.append(f.label);
+        if (f.type === "select") {
+          inp = document.createElement("select");
+          for (const [v, t] of f.opts) inp.add(new Option(t, v));
+        } else if (f.type === "fontpick") {
+          const w = document.createElement("div"); w.className = "asset";
+          inp = document.createElement("select"); inp.dataset.fontpick = "1";
+          const up = document.createElement("button"); up.textContent = "＋"; up.title = "Загрузить свой шрифт";
+          const del = document.createElement("button"); del.textContent = "✕"; del.title = "Удалить выбранный свой шрифт";
+          up.onclick = e => { e.preventDefault(); uploadKind = {kind: "fonts", k: "font"}; $("file").value = ""; $("file").click(); };
+          del.onclick = async e => {
+            e.preventDefault(); if (!S.font) { toast("Это встроенный шрифт Windows, удалять нечего"); return; }
+            await api(`/api/asset/fonts/${encodeURIComponent(S.font)}`, {method: "DELETE"}).catch(x => toast(x.message));
+            await load();
+          };
+          w.append(inp, up, del); lab.append(w);
+          inp.addEventListener("change", () => {
+            if (inp.value.startsWith("file:")) { S.font = inp.value.slice(5); scheduleSave("font"); }
+            else { S.font = ""; S.fontBase = inp.value.slice(5); scheduleSave("font"); scheduleSave("fontBase"); }
+          });
+          g.appendChild(lab); continue;
+        } else if (f.type === "area") {
+          inp = document.createElement("textarea");
+        } else {
+          inp = document.createElement("input");
+          inp.type = f.type === "num" ? "number" : f.type;
+          if (f.step) inp.step = f.step;
+          if (f.min != null) inp.min = f.min; if (f.max != null) inp.max = f.max;
+        }
+        lab.append(inp);
+      }
+      if (f.type === "range") { const sp = document.createElement("b"); sp.style.color = "var(--text)"; lab.firstChild.after(sp); inp.addEventListener("input", () => sp.textContent = " " + inp.value); inp._sp = sp; }
+      inp.dataset.k = f.k;
+      inp.addEventListener(f.type === "select" || f.type === "check" ? "change" : "input", () => {
+        S[f.k] = f.type === "check" ? inp.checked : (f.type === "num" || f.type === "range") ? Number(inp.value) : inp.value;
+        scheduleSave(f.k);
+      });
+      g.appendChild(lab);
+    }
+    $("tab-" + sec.tab).appendChild(card);
+  }
+}
+
+function fill() {
+  for (const inp of document.querySelectorAll("#panes [data-k]")) {
+    const k = inp.dataset.k;
+    if (inp.type === "checkbox") inp.checked = S[k] === undefined ? (k === "badges" || k.startsWith("bd")) : !!S[k];
+    else inp.value = S[k] ?? "";
+    if (inp._sp) inp._sp.textContent = " " + inp.value;
+  }
+  const fp = document.querySelector("[data-fontpick]");
+  if (fp) {
+    fp.textContent = "";
+    const g1 = document.createElement("optgroup"); g1.label = "Готовые шрифты";
+    for (const f of FONT_BASES) { const o = new Option(f, "base:" + f); o.style.fontFamily = `"${f}"`; g1.append(o); }
+    fp.append(g1);
+    if ((assets.fonts || []).length) {
+      const g2 = document.createElement("optgroup"); g2.label = "Свои файлы";
+      for (const n of assets.fonts) g2.append(new Option(n.replace(/\.[^.]+$/, ""), "file:" + n));
+      fp.append(g2);
+    }
+    fp.value = S.font ? "file:" + S.font : "base:" + (S.fontBase || "Segoe UI");
+  }
+}
+
+let pending = {};
+function scheduleSave(k) {
+  if (k) pending[k] = S[k];
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const body = pending; pending = {};
+    if (Object.keys(body).length) post("/api/config", {style: body}).then(() => Quick.load()).catch(e => toast(e.message));
+  }, 250);
+}
+function openEditor() {
+  const w = window.open("/editor", "chatEditor", "width=1360,height=900");
+  if (!w) toast("Не удалось открыть окно. Открой в браузере: " + location.origin + "/editor");
+}
+
+async function load() {
+  const c = await api("/api/config");
+  S = c.style; assets = c.assets; U = c.users || {}; renderUsers();
+  $("channel").value = c.channel; $("nick").value = c.nick;
+  $("tokState").textContent = c.has_token ? "(сохранён)" : "";
+  fill();
+}
+
+async function refreshStatus() {
+  if (!$("pill")) return;
+  try {
+    const s = await api("/api/status");
+    const names = {idle: "не подключено", connecting: "подключение…", connected: "в сети", reconnecting: "переподключение…", error: "ошибка"};
+    $("pill").textContent = names[s.state] || s.state; $("pill").className = s.state;
+    $("updDot").hidden = !s.update;
+    $("info").textContent = [s.channel && "#" + s.channel, s.detail && s.state === "error" ? s.detail : "",
+      `7TV: ${s.emotes_channel}+${s.emotes_global}`, `кеш: ${s.cached}`, `оверлеев: ${s.overlays}`].filter(Boolean).join(" · ");
+  } catch (_) { $("pill").textContent = "сервер недоступен"; $("pill").className = "error"; }
+}
+
+$("file").addEventListener("change", async () => {
+  const f = $("file").files[0]; if (!f || !uploadKind) return;
+  const fd = new FormData(); fd.append("file", f);
+  try {
+    const r = await api(`/api/upload/${uploadKind.kind}`, {method: "POST", body: fd});
+    await load(); S[uploadKind.k] = r.name; fill(); scheduleSave(uploadKind.k);
+  } catch (e) { toast(e.message); }
+});
+
+$("bTest").onclick = () => post("/api/test").catch(e => toast(e.message));
+$("bClear").onclick = () => post("/api/clear").catch(e => toast(e.message));
+$("bEmotes").onclick = () => post("/api/refresh-emotes").then(refreshStatus).catch(e => toast(e.message));
+$("bConn").onclick = async () => {
+  const body = {channel: $("channel").value, nick: $("nick").value};
+  if ($("oauth").value) body.oauth = $("oauth").value;
+  try { await post("/api/config", body); $("oauth").value = ""; await load(); refreshStatus(); } catch (e) { toast(e.message); }
+};
+$("bTokDel").onclick = async () => { await post("/api/config", {clear_oauth: true}); await load(); };
+
+// ---------- эффекты ников ----------
+const FX_DEF = {prefix: "", nameColor: "", badge: "auto", gradient: false, c1: "#ff4d6d", c2: "#4cc9f0", c3: "", flow: true,
+  glow: false, glowColor: "#ffffff", glowSize: 8, pulse: false, onText: false, bubbleGlow: false};
+const PRESETS = {
+  "Радуга": ["#ff3b30", "#34c759", "#0a84ff"], "Огонь": ["#ff3b30", "#ff9f0a", "#ffd60a"],
+  "Лёд": ["#a8edea", "#4cc9f0", "#4361ee"], "Золото": ["#b8860b", "#ffd700", "#fff2a8"],
+  "Неон": ["#ff00e5", "#00e5ff", "#a3ff00"], "Закат": ["#ff512f", "#dd2476", "#6a3df0"],
+};
+let U = {}, uTimer = 0;
+function saveUsers() {
+  clearTimeout(uTimer);
+  uTimer = setTimeout(() => post("/api/config", {users: U}).catch(e => toast(e.message)), 250);
+}
+function mkBtn(t, fn, title) { const b = document.createElement("button"); b.textContent = t; if (title) b.title = title; b.onclick = fn; return b; }
+// вкладки окна
+function showTab(id) {
+  for (const b of $("tabs").children) b.classList.toggle("on", b.dataset.tab === id);
+  for (const p of document.querySelectorAll("#panes>.pane")) p.hidden = p.id !== "tab-" + id;
+  currentTab = id; try { localStorage.setItem("tab", id); } catch (_) {}
+  if (id === "log") { logN = 0; logLines = []; pollLog(); }
+}
+let currentTab = "quick";
+
+function renderUsers() {
+  const host = $("ulist"); host.textContent = "";
+  if (!Object.keys(U).length) { const e = document.createElement("div"); e.className = "hint"; e.style.padding = "14px 4px"; e.textContent = "Пока нет ников с эффектами. Добавь ник выше."; host.appendChild(e); return; }
+  const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  for (const login of Object.keys(U)) {
+    const fx = U[login];
+    if (!fx.badge) fx.badge = "auto";
+    const card = mk("details", "ucard"); card.open = !!renderUsers.openNew && renderUsers.openNew === login;
+    const h = mk("summary"); h.append(mk("b", "", login));
+    const play = mkBtn("▶", e => { e.preventDefault(); post("/api/test", {user: login}).catch(x => toast(x.message)); }, "Показать в примере"); play.className = "sm";
+    const rm = mkBtn("✕", e => { e.preventDefault(); delete U[login]; renderUsers(); saveUsers(); }, "Удалить ник"); rm.className = "sm danger";
+    h.append(play, rm);
+    const body = mk("div", "ub");
+    const group = title => { const w = mk("div"); w.append(mk("div", "sub", title)); const g = mk("div", "f"); g.style.marginTop = "10px"; w.append(g); body.append(w); return g; };
+    const field = (g, k, type, label, wide) => {
+      const lab = mk("label");
+      const inp = document.createElement("input");
+      if (type === "check") {
+        lab.className = "chk wide"; inp.type = "checkbox"; inp.checked = !!fx[k]; lab.append(inp, label);
+      } else {
+        if (wide) lab.className = "wide";
+        inp.type = type; inp.value = fx[k];
+        if (type === "number") { inp.min = 0; inp.max = 60; }
+        if (type === "text") inp.maxLength = 8;
+        lab.append(label, inp);
+      }
+      inp.addEventListener("input", () => {
+        fx[k] = type === "check" ? inp.checked : type === "number" ? Number(inp.value) : inp.value;
+        saveUsers();
+      });
+      g.appendChild(lab); return inp;
+    };
+    const optColor = (g, k, label) => {        // цвет, который можно очистить
+      const lab = mk("label"); const w = mk("div", "opt");
+      const inp = document.createElement("input"); inp.type = "color";
+      inp.value = fx[k] || "#ffffff"; inp.classList.toggle("emptyc", !fx[k]);
+      inp.addEventListener("input", () => { fx[k] = inp.value; inp.classList.remove("emptyc"); saveUsers(); });
+      const x = mkBtn("✕", () => { fx[k] = ""; inp.classList.add("emptyc"); saveUsers(); }, "Не использовать"); x.className = "sm";
+      w.append(inp, x); lab.append(label, w); g.appendChild(lab);
+    };
+    // --- ник и значки ---
+    let g = group("Ник и значки");
+    field(g, "prefix", "text", "Префикс (эмодзи, до 8 символов)");
+    optColor(g, "nameColor", "Цвет ника (без градиента)");
+    const bl = mk("label", "wide"); bl.append("Значки у этого ника");
+    const bs = document.createElement("select");
+    for (const [v, t] of [["auto", "По Twitch (как у всех)"], ["none", "Скрыть значки"], ["b", "Всегда: стример"], ["m", "Всегда: модератор"], ["l", "Всегда: главный модератор"]]) bs.add(new Option(t, v));
+    bs.value = fx.badge; bs.onchange = () => { fx.badge = bs.value; saveUsers(); };
+    bl.append(bs); g.appendChild(bl);
+    // --- градиент ---
+    g = group("Градиент");
+    field(g, "gradient", "check", "Включить градиент на нике");
+    const pl = mk("label", "wide"); pl.append("Готовый градиент");
+    const sel = document.createElement("select"); sel.add(new Option("— свой —", ""));
+    for (const n of Object.keys(PRESETS)) sel.add(new Option(n, n));
+    sel.onchange = () => {
+      const p = PRESETS[sel.value]; if (!p) return;
+      Object.assign(fx, {gradient: true, c1: p[0], c2: p[1], c3: p[2]}); renderUsers.openNew = login; renderUsers(); saveUsers();
+    };
+    pl.append(sel); g.appendChild(pl);
+    field(g, "c1", "color", "Цвет 1"); field(g, "c2", "color", "Цвет 2"); optColor(g, "c3", "Цвет 3 (по желанию)");
+    field(g, "flow", "check", "Переливание (анимация градиента)");
+    // --- свечение ---
+    g = group("Свечение");
+    field(g, "glow", "check", "Свечение ника");
+    field(g, "glowColor", "color", "Цвет свечения"); field(g, "glowSize", "number", "Сила свечения");
+    field(g, "pulse", "check", "Пульсация свечения");
+    field(g, "bubbleGlow", "check", "Свечение вокруг всей подложки");
+    field(g, "onText", "check", "Применить градиент и свечение и к тексту сообщения");
+    card.append(h, body); host.appendChild(card);
+  }
+  renderUsers.openNew = null;
+}
+$("bUAdd").onclick = () => {
+  const login = $("uAdd").value.trim().toLowerCase().replace(/^@/, "");
+  if (!/^[a-z0-9_]{1,25}$/.test(login)) { toast("Ник: латиница, цифры и _ (до 25 символов)"); return; }
+  if (!U[login]) U[login] = {...FX_DEF, gradient: true, glow: true};
+  renderUsers.openNew = login;
+  $("uAdd").value = ""; renderUsers(); saveUsers();
+};
+$("uAdd").addEventListener("keydown", e => { if (e.key === "Enter") $("bUAdd").click(); });
+
+// авто-примеры: чтобы справа всегда было видно, как выглядит чат
+let autoTimer = 0;
+function setAuto(on) {
+  clearInterval(autoTimer);
+  if (on) { post("/api/test").catch(() => {}); autoTimer = setInterval(() => { if (!document.hidden && !pvOff) post("/api/test").catch(() => {}); }, 9000); }
+  try { localStorage.setItem("autoDemo", on ? "1" : "0"); } catch (_) {}
+}
+$("auto").addEventListener("change", () => setAuto($("auto").checked));
+let savedAuto = null;
+try { savedAuto = localStorage.getItem("autoDemo"); } catch (_) {}
+$("auto").checked = savedAuto === null ? window.innerWidth >= 900 : savedAuto === "1";
+if ($("auto").checked) setAuto(true);
+// при развороте окна на весь экран включаем примеры сами (пока пользователь не выбрал вручную)
+window.matchMedia("(min-width:900px)").addEventListener("change", e => {
+  let pref = null; try { pref = localStorage.getItem("autoDemo"); } catch (_) {}
+  if (e.matches && pref === null) { $("auto").checked = true; autoTimer || setAuto(true); }
+});
+
+$("uOverlay").value = location.origin + "/overlay";
+$("uDock").value = location.origin + "/dock";
+
+// ---------- быстрые настройки (общий модуль с доком) ----------
+Quick.mount($("quick"), {
+  toast,
+  onChange(kind) { if (kind === "preset") load(); else if (kind === "style") { const q = Quick.style; for (const k of ["uiScale", "perf", "font"]) S[k] = q[k]; fill(); } },
+});
+
+// ---------- журнал и выход ----------
+let logN = 0, logLines = [];
+async function pollLog() {
+  if (currentTab !== "log" || document.hidden) return;
+  try {
+    const r = await api("/api/logs?since=" + logN); logN = r.last;
+    if (!r.lines.length) return;
+    const el = $("log"), stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+    for (const [, t, lvl, msg] of r.lines) logLines.push(`${t} ${lvl === "INFO" ? "" : lvl + " "}${msg}`);
+    logLines = logLines.slice(-400); el.textContent = logLines.join("\n");
+    if (stick) el.scrollTop = el.scrollHeight;
+  } catch (_) {}
+}
+for (const b of $("tabs").children) b.onclick = () => showTab(b.dataset.tab);
+try { const t = localStorage.getItem("tab"); if (t && $("tab-" + t)) showTab(t); } catch (_) {}
+setInterval(pollLog, 1500);
+$("bLogCopy").onclick = () => navigator.clipboard.writeText(logLines.join("\n")).then(() => toast("Скопировано", true), () => toast("Не удалось скопировать"));
+$("bLogClear").onclick = () => { logLines = []; $("log").textContent = ""; };
+$("bQuit").onclick = async () => {
+  const b = $("bQuit");
+  if (b.dataset.arm !== "1") { b.dataset.arm = "1"; b.textContent = "Точно закрыть?"; setTimeout(() => { b.dataset.arm = ""; b.textContent = "⏻ Выход"; }, 3000); return; }
+  try { await post("/api/quit"); } catch (_) {}
+  clearInterval(autoTimer);
+  document.body.innerHTML = '<div style="padding:30px;font:16px system-ui;color:#ddd">Программа закрыта. Чат в OBS больше не обновляется. Окно можно закрыть.</div>';
+};
+
+// ---------- экономия: пример в окне не крутится, пока окно не в фокусе ----------
+let idlePause = true; try { idlePause = localStorage.getItem("idlePause") !== "0"; } catch (_) {}
+let idleT = 0, pvOff = false; const pvFrame = $("prev"), pvSrc = pvFrame.getAttribute("src");
+function pvSet(on) { if (on && pvOff) { pvFrame.src = pvSrc; pvOff = false; } else if (!on && !pvOff) { pvFrame.src = "about:blank"; pvOff = true; } }
+function pvIdleCheck() {
+  clearTimeout(idleT);
+  if (!idlePause || (document.hasFocus() && !document.hidden)) pvSet(true); else idleT = setTimeout(() => pvSet(false), 6000);
+}
+window.addEventListener("blur", pvIdleCheck); window.addEventListener("focus", pvIdleCheck);
+document.addEventListener("visibilitychange", pvIdleCheck);
+
+// ---------- верхняя панель: ссылки и настройки ----------
+for (const d of document.querySelectorAll("dialog")) {
+  d.addEventListener("click", e => { if (e.target === d) d.close(); });
+  d.querySelector("[data-close]").onclick = () => d.close();
+}
+for (const b of document.querySelectorAll("[data-copy]")) b.onclick = () =>
+  navigator.clipboard.writeText($(b.dataset.copy).value).then(() => toast("Скопировано", true), () => { $(b.dataset.copy).select(); toast("Скопируй вручную: Ctrl+C"); });
+$("bLinks").onclick = () => $("dLinks").showModal();
+let AP = {}, INFO = {};
+function markTheme() { for (const b of $("themeGrid").children) b.classList.toggle("on", b.dataset.th === AppTheme.mode); }
+for (const b of $("themeGrid").children) b.onclick = () => { AppTheme.set(b.dataset.th); markTheme(); saveApp({theme: b.dataset.th}); };
+for (const b of $("sTabs").children) b.onclick = () => {
+  for (const x of $("sTabs").children) x.classList.toggle("on", x === b);
+  for (const p of document.querySelectorAll(".spane")) p.hidden = p.id !== "s-" + b.dataset.s;
+};
+function fillSettings() {
+  $("sPerf").value = S.perf || "balanced"; $("sGuard").checked = S.guard !== false; $("sRate").value = S.maxPerSec || 5; $("sCache").value = AP.cacheMb; $("sSrc").value = AP.updateSource || ""; $("sChk").checked = !!AP.checkUpdates;
+  $("sAuto").checked = !!INFO.autostart; $("sAuto").disabled = !INFO.windows;
+  for (const b of $("sClose").children) b.classList.toggle("on", b.dataset.v === AP.onClose);
+  $("sCloseHint").textContent = AP.onClose === "tray"
+    ? (INFO.tray ? "Окно закроется, программа останется в трее (значок у часов): чат в OBS продолжит работать. Открыть снова: клик по значку. Выход: правый клик → Выход."
+                 : "Программа останется работать в фоне. Значок трея появится после установки библиотек: запусти install.bat ещё раз.")
+    : "Закрытие окна полностью остановит программу, чат в OBS перестанет работать.";
+  if (window.AppTheme) { AppTheme.sync(AP.theme); markTheme(); }
+  $("vInfo").textContent = `Версия ${INFO.version || "?"}` + (INFO.frozen ? " (exe)" : "");
+  $("updDot").hidden = !(INFO.update && INFO.update.newer);
+}
+async function loadSettings() { const c = await api("/api/config"); AP = c.app; INFO = c.info; S = Object.assign(S, c.style); fillSettings(); return c; }
+const saveApp = o => post("/api/config", {app: o}).then(loadSettings).catch(e => toast(e.message));
+let diagT = 0;
+async function diag() {
+  try {
+    const r = await api("/api/stats"), o = r.overlays || [];
+    let t = `Сервер чата: ${r.server_cpu}% процессора`;
+    if (!o.length) t += "\nОверлей в OBS: данных нет (источник не подключён, скрыт или чат давно не получал сообщений).";
+    for (const v of o) t += `\nОверлей в OBS: сообщений на экране ${v.rows}, смайлов ${v.anim}, кадр ${v.frameMs ?? "—"} мс, долгих задач всего ${v.longs}, автозащита: уровень ${v.guard}${v.game ? ", режим игры" : ""}`;
+    $("diag").textContent = t;
+  } catch (e) { $("diag").textContent = "Нет данных"; }
+}
+$("dSet").addEventListener("close", () => clearInterval(diagT));
+$("bSet").onclick = async () => { await loadSettings(); $("dSet").showModal(); diag(); diagT = setInterval(diag, 3000); };
+$("sPerf").onchange = () => { S.perf = $("sPerf").value; post("/api/config", {style: {perf: S.perf}}).then(() => { Quick.load(); fill(); }).catch(e => toast(e.message)); };
+$("sGuard").onchange = () => { S.guard = $("sGuard").checked; post("/api/config", {style: {guard: S.guard}}).catch(e => toast(e.message)); };
+$("sRate").onchange = () => { S.maxPerSec = +$("sRate").value; post("/api/config", {style: {maxPerSec: S.maxPerSec}}).then(loadSettings).catch(e => toast(e.message)); };
+$("sIdle").checked = idlePause;
+$("sIdle").onchange = () => { idlePause = $("sIdle").checked; try { localStorage.setItem("idlePause", idlePause ? "1" : "0"); } catch (_) {} pvIdleCheck(); };
+$("sCache").onchange = () => saveApp({cacheMb: +$("sCache").value});
+$("sChk").onchange = () => saveApp({checkUpdates: $("sChk").checked});
+$("sSrc").onchange = () => saveApp({updateSource: $("sSrc").value});
+for (const b of $("sClose").children) b.onclick = () => saveApp({onClose: b.dataset.v});
+$("sAuto").onchange = async () => {
+  try { await post("/api/autostart", {enabled: $("sAuto").checked}); toast($("sAuto").checked ? "Автозапуск включён" : "Автозапуск выключен", true); }
+  catch (e) { toast(e.message); }
+  loadSettings();
+};
+$("bUpd").onclick = async () => {
+  const m = $("updMsg"); m.textContent = "Проверяю…"; $("bUpdGo").hidden = true;
+  try {
+    await post("/api/config", {app: {updateSource: $("sSrc").value}});
+    const r = await post("/api/update/check");
+    if (r.error) m.textContent = r.error;
+    else if (r.newer) { m.textContent = `Доступна версия ${r.latest} (у тебя ${r.current}).` + (r.notes ? "\n" + r.notes : ""); $("bUpdGo").hidden = false; }
+    else m.textContent = `У тебя последняя версия (${r.current}).`;
+    loadSettings();
+  } catch (e) { m.textContent = e.message; }
+};
+$("bUpdGo").onclick = async () => {
+  $("updMsg").textContent = "Скачиваю и устанавливаю… Программа перезапустится сама.";
+  try { await post("/api/update/install"); } catch (e) { $("updMsg").textContent = e.message; }
+};
+// сокет окна: по нему сервер понимает, что окно закрыто (режим «закрытие = выход»)
+(function panelWs(d = 500) {
+  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws-panel");
+  ws.onopen = () => { d = 500; };
+  ws.onclose = () => setTimeout(() => panelWs(Math.min(d * 2, 8000)), d);
+})();
+
+build(); load(); refreshStatus(); loadSettings().catch(() => {}); setInterval(() => { if (!document.hidden) refreshStatus(); }, 3000);
+</script>
+</body>
+</html>

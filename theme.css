@@ -1,0 +1,74 @@
+/* Общий дизайн приложения: окно программы, док OBS, конструктор. Тема переключается атрибутом data-theme. */
+:root{color-scheme:dark;
+  --bg:#0e0f12;--panel:#15161a;--card:#1b1c21;--card2:#22232a;--line:#2a2c34;
+  --text:#e9eaee;--muted:#a3a6b2;--faint:#727585;
+  --btn:#272931;--btn-h:#32343d;--btn-line:#383b45;
+  --input:#101114;--input-line:#363943;
+  --accent:#9146ff;--accent-h:#a66bff;--accent-soft:rgba(145,70,255,.16);
+  --ok:#1f9d55;--err:#d64545;--warn:#e0a030;--danger:#4a2226;--danger-h:#63292f;
+  --shadow:0 14px 40px rgba(0,0,0,.5);--r:10px}
+:root[data-theme=light]{color-scheme:light;
+  --bg:#eceef4;--panel:#f7f8fb;--card:#ffffff;--card2:#f1f2f7;--line:#dcdfe9;
+  --text:#1a1c25;--muted:#586075;--faint:#8a90a3;
+  --btn:#eceef5;--btn-h:#dfe2ed;--btn-line:#cdd1df;
+  --input:#ffffff;--input-line:#c6cada;
+  --accent:#7a3df0;--accent-h:#6a2ee0;--accent-soft:rgba(122,61,240,.12);
+  --danger:#fbe4e4;--danger-h:#f5cdcd;
+  --shadow:0 14px 40px rgba(30,36,64,.18)}
+
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--text)}
+body{margin:0;font:13px/1.5 "Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+h3,h4{margin:0}
+::selection{background:var(--accent-soft)}
+*{scrollbar-width:thin;scrollbar-color:var(--btn-line) transparent}
+
+button{background:var(--btn);color:var(--text);border:1px solid var(--btn-line);border-radius:8px;padding:7px 13px;cursor:pointer;font:inherit;line-height:1.2;transition:background .15s,border-color .15s,transform .05s}
+button:hover{background:var(--btn-h)}
+button:active{transform:translateY(1px)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.pri:hover{background:var(--accent-h);border-color:var(--accent-h)}
+button.danger{background:var(--danger);border-color:transparent;color:var(--text)}
+button.danger:hover{background:var(--danger-h)}
+button.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+button.ghost:hover{background:var(--btn);color:var(--text)}
+button.sm{padding:4px 9px;font-size:12px}
+
+input[type=text],input[type=password],input[type=number],select,textarea{width:100%;background:var(--input);color:var(--text);border:1px solid var(--input-line);border-radius:8px;padding:7px 10px;font:inherit}
+input[type=color]{width:100%;height:32px;padding:2px;background:var(--input);border:1px solid var(--input-line);border-radius:8px;cursor:pointer}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;flex:none}
+textarea{resize:vertical;min-height:44px}
+select{cursor:pointer}
+
+label{display:flex;flex-direction:column;gap:4px;color:var(--muted);font-size:12px}
+label.chk{flex-direction:row;align-items:center;gap:9px;color:var(--text);font-size:13px;cursor:pointer}
+.hint{color:var(--faint);font-size:12px;line-height:1.45}
+
+/* карточки и сетка полей */
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px}
+.card>h4{font-size:13px;font-weight:700;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.card>h4 small{font-weight:400;color:var(--faint);font-size:12px}
+.f{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+.f .wide,.f>.hint{grid-column:1/-1}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+.asset{display:flex;gap:6px}.asset>select,.asset>input{flex:1;min-width:0}
+
+/* вкладки */
+.tabs{display:flex;gap:4px;padding:4px;background:var(--card2);border:1px solid var(--line);border-radius:12px;overflow-x:auto}
+.tabs button{flex:1;background:transparent;border:0;border-radius:9px;padding:8px 10px;color:var(--muted);white-space:nowrap}
+.tabs button:hover{background:var(--btn);color:var(--text)}
+.tabs button.on{background:var(--accent);color:#fff;font-weight:600}
+
+/* переключатель из двух-трёх кнопок */
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--btn-line);border-radius:10px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:var(--btn)}
+.seg button+button{border-left:1px solid var(--btn-line)}
+.seg button.on{background:var(--accent);color:#fff;font-weight:600}
+
+.badge-dot{width:10px;height:10px;border-radius:50%;background:var(--warn)}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;max-width:min(560px,92vw);background:var(--err);color:#fff;padding:10px 16px;border-radius:10px;box-shadow:var(--shadow);display:none;z-index:50}
+
+dialog{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:0;width:min(600px,94vw);max-height:90vh;overflow:auto;box-shadow:var(--shadow)}
+dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(2px)}

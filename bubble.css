@@ -1,0 +1,105 @@
+/* Общие стили сообщения: их используют и оверлей, и конструктор (editor.html) */
+.bk{
+  --fs:28px;--fw:600;--text:#fff;--name:#fc0;--es:1.5;--gap:8px;
+  --pt:6px;--pr:10px;--pb:6px;--pl:10px;
+  --it:0px;--ir:0px;--ib:0px;--il:0px;            /* запас под рамку PNG */
+  --slt:24;--slr:24;--sll:24;--slb:24;
+  --radius:14px;--maxw:100%;--minw:0px;--ta:left;--dsc:1;
+  --fill:none;--glow:none;--pglow:none;--gl:none;--ringbg:none;--bw:0px;--skin:none;
+  --shadow:0 2px 4px rgba(0,0,0,.85);
+  --font:"Segoe UI",system-ui,sans-serif;
+  font-family:var(--font);
+}
+
+/* ---------- сообщение ---------- */
+.bk .msg{position:relative;isolation:isolate;box-sizing:border-box;width:fit-content;min-width:var(--minw);max-width:100%;
+  margin-bottom:var(--gap);
+  padding:calc(var(--pt) + var(--it)) calc(var(--pr) + var(--ir)) calc(var(--pb) + var(--ib)) calc(var(--pl) + var(--il));
+  color:var(--text);font-size:var(--fs);font-weight:var(--fw);line-height:1.25;overflow-wrap:anywhere;
+  text-shadow:var(--shadow);text-align:var(--ta)}
+
+/* слои подложки: заливка, градиент поверх, контур */
+.bk .bgl,.bk .gl,.bk .ring{position:absolute;inset:0;pointer-events:none;z-index:-2;border-radius:var(--radius)}
+.bk .bgl{background:var(--fill);box-shadow:var(--glow)}
+.bk .gl{background:var(--gl)}
+.bk .ring{box-sizing:border-box;padding:var(--bw);background:var(--ringbg);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+
+/* PNG-подложка: 9-slice (рамка не искажается), растянуть или заполнить */
+.bk.png .bgl{border-radius:0;background:none;box-shadow:none;filter:var(--pglow);
+  border:solid transparent;border-width:var(--it) var(--ir) var(--ib) var(--il);
+  border-image-source:var(--skin);border-image-slice:var(--slt) var(--slr) var(--slb) var(--sll) fill;border-image-repeat:stretch}
+.bk.png.stretch .bgl{border:0;border-image:none;background:var(--skin) 0 0/100% 100% no-repeat}
+.bk.png.cover .bgl{border:0;border-image:none;background:var(--skin) center/cover no-repeat}
+/* градиент поверх PNG ограничиваем формой самой картинки */
+.bk.png .gl,.bk.png .ring{border-radius:0}
+.bk.png .ring{display:none}
+.bk.png .gl{-webkit-mask-box-image-source:var(--skin);-webkit-mask-box-image-slice:var(--slt) var(--slr) var(--slb) var(--sll) fill;
+  -webkit-mask-box-image-width:var(--it) var(--ir) var(--ib) var(--il);-webkit-mask-box-image-repeat:stretch}
+.bk.png.stretch .gl{-webkit-mask:var(--skin) 0 0/100% 100% no-repeat;mask:var(--skin) 0 0/100% 100% no-repeat}
+.bk.png.cover .gl{-webkit-mask:var(--skin) center/cover no-repeat;mask:var(--skin) center/cover no-repeat}
+
+/* ---------- текст ---------- */
+.bk .name{font-weight:var(--nw,800)}
+.bk.fixedname .name{color:var(--name)!important}
+.bk.stacked .nm{display:flex;align-items:center}
+.bk.stacked .name{display:block}
+.bk.stacked .sep{display:none}
+.bk .msg.me .text{font-style:italic}
+.bk .pfx{margin-right:.25em}
+.bk .emote{display:inline-block;height:calc(var(--fs)*var(--es));width:auto;vertical-align:middle;margin:-.25em .06em}
+.bk .zwrap{position:relative;display:inline-block;vertical-align:middle}
+.bk .zwrap .zw{position:absolute;left:50%;top:0;margin:-.25em 0;transform:translateX(-50%)}
+
+/* ---------- эффекты ников ---------- */
+.bk .fx-grad{background-image:linear-gradient(90deg,var(--g));background-size:100% 100%;background-repeat:repeat-x;
+  -webkit-background-clip:text;background-clip:text;color:transparent!important;text-shadow:none!important}
+.bk .name.fx-grad{display:inline-block}
+.bk.stacked .name.fx-grad{display:block;width:fit-content}
+.bk .fx-grad.flow{background-size:200% 100%;animation:fxflow 3s linear infinite}
+.bk .fx-glow{filter:drop-shadow(0 0 var(--gs) var(--gc))}
+.bk .fx-pulse{animation:fxpulse 1.6s ease-in-out infinite}
+.bk .fx-grad.flow.fx-pulse{animation:fxflow 3s linear infinite,fxpulse 1.6s ease-in-out infinite}
+/* эконом-режим: никаких бесконечных анимаций */
+.bk.lite .fx-grad.flow,.bk.lite .fx-grad.flow.fx-pulse{animation:none;background-size:100% 100%}
+.bk.lite .fx-pulse{animation:none}
+@keyframes fxflow{to{background-position:200% 0}}
+@keyframes fxpulse{0%,100%{filter:drop-shadow(0 0 calc(var(--gs)*.35) var(--gc))}50%{filter:drop-shadow(0 0 calc(var(--gs)*1.3) var(--gc))}}
+
+/* ---------- декор: позиция = якорь (в % сообщения) + смещение в px ---------- */
+.bk .dc{position:absolute;pointer-events:none;transform:translate(-50%,-50%);
+  left:calc(var(--ax)*1% + var(--ox)*var(--dsc)*1px);top:calc(var(--ay)*1% + var(--oy)*var(--dsc)*1px)}
+.bk .dc.under{z-index:-3}
+.bk .dc.back{z-index:-1}
+.bk .dc.front{z-index:2}
+.bk .dc.img{width:calc(var(--w)*var(--dsc)*1px)}
+.bk .dc.g{font-size:calc(var(--w)*var(--dsc)*1px);line-height:1;white-space:nowrap;text-shadow:none}
+.bk .dc .da{display:block}
+.bk .dc.img .da{width:100%}
+.bk .dc .di{display:block;transform:rotate(calc(var(--rot)*1deg)) scaleX(var(--fl));opacity:calc(var(--op)/100);user-select:none}
+.bk .dc.img .di{width:100%;height:auto}
+.bk .dc.g .di{display:inline-block;color:var(--c)}
+.bk .dc.edit{pointer-events:auto;cursor:grab;touch-action:none}
+.bk .dc.edit.sel .da{outline:2px dashed #4da3ff;outline-offset:3px}
+.bk .dc.a-float .da{animation:dc-float 2.4s ease-in-out infinite}
+.bk .dc.a-spin .da{animation:dc-spin 6s linear infinite}
+.bk .dc.a-pulse .da{animation:dc-pulse 1.8s ease-in-out infinite}
+.bk .dc.a-swing .da{animation:dc-swing 2.2s ease-in-out infinite}
+.bk .dc.a-blink .da{animation:dc-blink 1.6s ease-in-out infinite}
+@keyframes dc-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes dc-spin{to{transform:rotate(360deg)}}
+@keyframes dc-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
+@keyframes dc-swing{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}}
+@keyframes dc-blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* автозащита, крайний уровень: без свечений, теней и фильтров */
+.bk.ultra .bgl,.bk.ultra .fx-glow,.bk.ultra .msg,.bk.ultra .name{box-shadow:none!important;filter:none!important;text-shadow:none!important}
+.bk.ultra .fx-grad,.bk.ultra .fx-pulse,.bk.ultra .da{animation:none!important}
+
+/* ---------- значки у ника (рисуются самой программой) ---------- */
+.bk .nm{display:inline}
+.bk .bdg{display:inline-block;width:1.05em;height:1.05em;margin-right:.3em;vertical-align:-.15em;background:center/contain no-repeat}
+.bk .bdg.m{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect width='18' height='18' rx='3.5' fill='%2300ad03'/%3E%3Cg stroke='white' stroke-linecap='round' fill='none'%3E%3Cpath d='M7 11L14 4' stroke-width='2.2'/%3E%3Cpath d='M5.2 8.8L9.2 12.8' stroke-width='1.8'/%3E%3Cpath d='M6.4 11.6L4 14' stroke-width='1.8'/%3E%3C/g%3E%3C/svg%3E")}
+.bk .bdg.l{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect width='18' height='18' rx='3.5' fill='%230a7d0f'/%3E%3Cpath d='M5 1.8l.9 2 2.1.2-1.6 1.4.5 2.1L5 6.4 3.1 7.5l.5-2.1L2 4l2.1-.2z' fill='%23ffd34d'/%3E%3Cg stroke='white' stroke-linecap='round' fill='none'%3E%3Cpath d='M7 11L14 4' stroke-width='2.2'/%3E%3Cpath d='M5.2 8.8L9.2 12.8' stroke-width='1.8'/%3E%3Cpath d='M6.4 11.6L4 14' stroke-width='1.8'/%3E%3C/g%3E%3C/svg%3E")}
+.bk .bdg.b{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect width='18' height='18' rx='3.5' fill='%23e91916'/%3E%3Crect x='3' y='5.8' width='8' height='6.4' rx='1.3' fill='white'/%3E%3Cpath d='M11.6 8.1L15 6.1v5.8l-3.4-2z' fill='white'/%3E%3C/svg%3E")}
