@@ -25,6 +25,16 @@ const Quick = (() => {
 .qk .chip button.x{padding:6px 10px;color:var(--faint);border-left:1px solid var(--btn-line)}
 .qk .chip button.x:hover{color:var(--err)}
 .qk .chip.on{border-color:var(--accent);background:var(--accent-soft)}
+.qk .chip button.s{padding:6px 9px;color:var(--faint);border-left:1px solid var(--btn-line);font-size:12px}
+.qk .chip button.s:hover{color:var(--accent)}
+.qk .imp{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.qk .imp h5{margin:0 0 8px;font-size:12px;font-weight:700;color:var(--text)}
+.qk .imp textarea{width:100%;min-height:54px;resize:vertical;font:12px/1.4 Consolas,monospace}
+.qk .imp .row{margin-top:8px;flex-wrap:wrap}
+.qk .qb.drop{outline:2px dashed var(--accent);outline-offset:-6px;background:var(--accent-soft)}
+.qk .qb{position:relative}
+.qk .dz{display:none;position:absolute;inset:0;align-items:center;justify-content:center;border-radius:14px;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:14px;pointer-events:none;text-align:center;padding:12px}
+.qk .qb.drop .dz{display:flex}
 .qk .none{color:var(--faint);font-size:12px}
 .qk .game{width:100%;padding:12px;font-weight:700;font-size:14px}
 .qk .game.on{background:var(--ok);border-color:var(--ok);color:#fff}
@@ -40,6 +50,53 @@ const Quick = (() => {
   };
   const post = (url, body) => api(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
   const say = (m, ok) => (opt.toast || (() => {}))(m, ok);
+
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); return; } catch (_) { /* в доке OBS буфер может быть закрыт: запасной способ ниже */ }
+    const ta = E("textarea"); ta.value = t; ta.style.cssText = "position:fixed;left:-9999px;top:0"; document.body.append(ta);
+    ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (_) {} ta.remove();
+    if (!ok) throw new Error("Не удалось скопировать. Используй кнопку «txt».");
+  }
+  function saveText(name, text) {
+    const a = E("a"); a.href = URL.createObjectURL(new Blob([text], {type: "text/plain;charset=utf-8"})); a.download = name;
+    document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  function exportNote(msg, r) {
+    const m = (r.missing || []).length;
+    return msg + (r.embedded && r.embedded.length ? ` (с файлами: ${r.embedded.length})` : "") + (m ? `. Не вложены (нет файла или слишком большие): ${r.missing.join(", ")}` : "");
+  }
+  async function doImport(code, quiet) {
+    const r = await post("/api/presets", {action: "import", code});
+    presets = r.presets; active = r.name; chipsFill(); opt.onChange && opt.onChange("presets");
+    if (!quiet) say("Пресет добавлен: " + r.name + (r.added.length ? ` (файлов: ${r.added.length})` : "") + (r.missing.length ? ". Нет файлов: " + r.missing.join(", ") : ""), true);
+    return r;
+  }
+  // один или несколько файлов .txt (выбор или перетаскивание)
+  async function importFiles(list) {
+    const files = [...list].slice(0, 10), ok = [], bad = [];
+    for (const f of files) {
+      if (f.size > 16 << 20) { bad.push(f.name + ": файл слишком большой"); continue; }
+      try { ok.push((await doImport(await f.text(), true)).name); } catch (e) { bad.push(f.name + ": " + e.message); }
+    }
+    if (!files.length) return;
+    if (!bad.length && ok.length === 1) say("Пресет добавлен: " + ok[0], true);
+    else say((ok.length ? "Добавлено пресетов: " + ok.length + " (" + ok.join(", ") + ")" : "") + (bad.length ? (ok.length ? ". " : "") + "Не удалось: " + bad.join("; ") : ""), !!ok.length && !bad.length);
+  }
+  const hasFiles = e => e.dataTransfer && [...(e.dataTransfer.types || [])].some(t => t === "Files" || t === "text/plain");
+  function dropZone(el) {
+    let depth = 0;
+    const off = () => { depth = 0; el.classList.remove("drop"); };
+    el.addEventListener("dragenter", e => { if (!hasFiles(e)) return; e.preventDefault(); depth++; el.classList.add("drop"); });
+    el.addEventListener("dragover", e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+    el.addEventListener("dragleave", e => { if (--depth <= 0) off(); });
+    el.addEventListener("drop", async e => {
+      if (!hasFiles(e)) return; e.preventDefault(); off();
+      const fl = e.dataTransfer.files;
+      if (fl && fl.length) return importFiles(fl);
+      const t = (e.dataTransfer.getData("text/plain") || "").trim();   // перетащили выделенный текст с кодом
+      if (t) try { await doImport(t); } catch (er) { say(er.message); }
+    });
+  }
 
   function patch(k, v) {
     S[k] = v; pend[k] = v; clearTimeout(saveT);
@@ -100,7 +157,27 @@ const Quick = (() => {
     };
     nm.addEventListener("keydown", e => { if (e.key === "Enter") sv.click(); });
     row.append(nm, sv); nm.style.flex = "1";
-    b4.append(chips, row, E("div", "qh", "Пресет запоминает внешний вид: конструктор, шрифт, масштаб, анимации и оптимизацию. Подключение и фильтры не затрагиваются."));
+    b4.append(chips, row, E("div", "qh", "Пресет запоминает внешний вид: конструктор, шрифт, масштаб, анимации и оптимизацию. Подключение и фильтры не затрагиваются. Каждый пресет лежит файлом .txt в папке data\\presets. «Код» копирует его, чтобы отправить другому человеку, вместе с подложкой, декором и шрифтом (если они небольшие)."));
+    const imp = E("div", "imp"); imp.append(E("h5", "", "Получить пресет от другого человека"));
+    const ta = E("textarea"); ta.id = "qCode"; ta.placeholder = "Вставь код пресета (начинается с TC7TV1:) или перетащи сюда файл .txt"; ta.spellcheck = false;
+    const r2 = E("div", "row");
+    const bi = E("button", "pri", "Добавить по коду"); bi.id = "qImport";
+    bi.onclick = async () => {
+      const code = ta.value.trim();
+      if (!code) { say("Вставь код пресета"); ta.focus(); return; }
+      try { await doImport(code); ta.value = ""; } catch (e) { say(e.message); }
+    };
+    const bp = E("button", "", "Из буфера"); bp.title = "Вставить код из буфера обмена и добавить";
+    bp.onclick = async () => {
+      try { const t = (await navigator.clipboard.readText()).trim(); ta.value = t; if (t) await doImport(t), ta.value = ""; else say("Буфер пуст"); }
+      catch (e) { say(e.name === "NotAllowedError" || e.name === "SecurityError" ? "Буфер недоступен: вставь код в поле вручную (Ctrl+V)" : e.message); }
+    };
+    const bf = E("button", "", "Из файла txt"); const fi = E("input"); fi.type = "file"; fi.accept = ".txt,text/plain"; fi.style.display = "none"; fi.id = "qFile";
+    bf.onclick = () => fi.click();
+    fi.multiple = true;
+    fi.onchange = () => { const l = [...fi.files]; fi.value = ""; importFiles(l); };
+    r2.append(bi, bp, bf, fi); imp.append(ta, r2);
+    const dz = E("div", "dz", "Отпусти файл .txt, чтобы добавить пресет"); b4.append(imp, dz); dropZone(b4);
     host.append(b0, b1, b2, b3, b4);
   }
 
@@ -131,13 +208,23 @@ const Quick = (() => {
           await load(); opt.onChange && opt.onChange("preset");
         } catch (e) { say(e.message); }
       };
+      const cp = E("button", "s", "Код"); cp.title = "Скопировать код пресета, чтобы отправить другому человеку";
+      cp.onclick = async () => {
+        try { const r = await post("/api/presets", {action: "export", name}); await copyText(r.code); say(exportNote("Код пресета «" + name + "» скопирован", r), true); }
+        catch (e) { say(e.message); }
+      };
+      const tx = E("button", "s", "txt"); tx.title = "Скачать пресет файлом .txt";
+      tx.onclick = async () => {
+        try { const r = await post("/api/presets", {action: "export", name}); saveText(name.replace(/[^\w\-. ]+/g, "_") + ".txt", r.code); say(exportNote("Файл пресета сохранён", r), true); }
+        catch (e) { say(e.message); }
+      };
       const x = E("button", "x", "✕"); x.title = "Удалить пресет";
       x.onclick = async () => {
         if (x.dataset.arm !== "1") { x.dataset.arm = "1"; x.textContent = "удалить?"; setTimeout(() => { x.dataset.arm = ""; x.textContent = "✕"; }, 2500); return; }
         try { const r = await post("/api/presets", {action: "delete", name}); presets = r.presets; if (active === name) active = ""; chipsFill(); opt.onChange && opt.onChange("presets"); }
         catch (e) { say(e.message); }
       };
-      ch.append(a, x); c.append(ch);
+      ch.append(a, cp, tx, x); c.append(ch);
     }
   }
   function fill() {
@@ -164,6 +251,10 @@ const Quick = (() => {
   }
   function mount(h, o) {
     host = h; opt = o || {};
+    if (!mount.once) {       // файл, брошенный мимо поля, не должен открываться в окне вместо пресета
+      mount.once = true;
+      for (const t of ["dragover", "drop"]) window.addEventListener(t, e => { if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files")) e.preventDefault(); });
+    }
     if (!document.getElementById("qkcss")) { const st = E("style"); st.id = "qkcss"; st.textContent = CSS; document.head.append(st); }
     build(); return load();
   }

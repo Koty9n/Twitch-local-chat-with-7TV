@@ -14,6 +14,7 @@ Twitch chat 7TV
 from __future__ import annotations
 
 import asyncio
+import base64
 import collections
 import json
 import logging
@@ -26,12 +27,13 @@ import socket
 import subprocess
 import sys
 import time
+import zlib
 import webbrowser
 from pathlib import Path
 from urllib.parse import urlparse
 
 log = logging.getLogger("chat")
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.6.0"
 APP_NAME = "Twitch chat 7TV"
 
 
@@ -61,7 +63,8 @@ else:
     RES = BASE = Path(__file__).resolve().parent
 DATA = BASE / "data"
 SKINS, FONTS, EMOTES, DECOR = DATA / "skins", DATA / "fonts", DATA / "emotes", DATA / "decor"
-for _d in (SKINS, FONTS, EMOTES, DECOR):
+PRESET_DIR = DATA / "presets"
+for _d in (SKINS, FONTS, EMOTES, DECOR, PRESET_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 CONFIG_PATH = DATA / "config.json"
 
@@ -347,6 +350,145 @@ def sanitize_presets(raw) -> dict:
         out[name] = {"style": {k: st[k] for k in STYLE if k not in PRESET_SKIP},
                      "theme": sanitize_theme(v.get("theme"))}
     return out
+
+
+# ----------------------------------------------------------------------------
+# Пресеты: txt-файлы и код для передачи
+# ----------------------------------------------------------------------------
+PRESET_MAGIC = "TC7TV1:"
+IMG_EXT = {".png", ".webp", ".gif", ".apng"}
+FILE_KINDS = {"skins": (SKINS, IMG_EXT), "decor": (DECOR, IMG_EXT), "fonts": (FONTS, {".ttf", ".otf", ".woff", ".woff2"})}
+EMBED_LIMIT = 3 << 20      # файлы больше этого объёма в код не вкладываются (подложка, декор, шрифт)
+CODE_LIMIT = 16 << 20      # максимальный размер вставляемого кода
+
+
+def preset_path(name: str) -> Path:
+    safe = re.sub(r"[^\w\-. ]+", "_", name, flags=re.U).strip(" .")[:60] or "preset"
+    return PRESET_DIR / f"{safe}.txt"
+
+
+def preset_refs(pr: dict) -> list[tuple[str, str]]:
+    """Файлы, на которые ссылается пресет: [(папка, имя)]."""
+    refs: list[tuple[str, str]] = []
+    st, th = pr.get("style") or {}, pr.get("theme") or {}
+    if st.get("skin"):
+        refs.append(("skins", st["skin"]))
+    if st.get("font"):
+        refs.append(("fonts", st["font"]))
+    for d in th.get("decor") or []:
+        if d.get("file"):
+            refs.append(("decor", d["file"]))
+    return list(dict.fromkeys(refs))
+
+
+def encode_preset(name: str, pr: dict) -> tuple[str, list[str], list[str]]:
+    """Код для передачи: «TC7TV1:» + base64(zlib(json)). Малые файлы подложки, декора и шрифта вкладываются в код."""
+    files: dict = {}
+    embedded: list[str] = []
+    missing: list[str] = []
+    total = 0
+    for kind, fname in preset_refs(pr):
+        p = FILE_KINDS[kind][0] / fname
+        try:
+            size = p.stat().st_size
+        except OSError:
+            missing.append(fname)
+            continue
+        if total + size > EMBED_LIMIT:
+            missing.append(fname)
+            continue
+        total += size
+        files.setdefault(kind, {})[fname] = base64.b64encode(p.read_bytes()).decode("ascii")
+        embedded.append(fname)
+    raw = json.dumps({"v": 1, "name": name, "style": pr["style"], "theme": pr["theme"], "files": files},
+                     ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return PRESET_MAGIC + base64.urlsafe_b64encode(zlib.compress(raw, 9)).decode("ascii"), embedded, missing
+
+
+def decode_preset(code: str) -> tuple[str, dict, dict]:
+    code = "".join(str(code or "").split())
+    if code.startswith(PRESET_MAGIC):
+        code = code[len(PRESET_MAGIC):]
+    else:
+        raise ValueError("Это не код пресета (он должен начинаться с TC7TV1:).")
+    if not code or len(code) > CODE_LIMIT:
+        raise ValueError("Код пустой или слишком большой.")
+    try:
+        d = zlib.decompressobj()
+        raw = d.decompress(base64.urlsafe_b64decode(code + "=" * (-len(code) % 4)), 48 << 20)
+        if d.unconsumed_tail:
+            raise ValueError("слишком большой")
+        data = json.loads(raw.decode("utf-8"))
+        if not isinstance(data, dict) or not isinstance(data.get("style"), dict):
+            raise ValueError("нет данных")
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(f"Код повреждён или обрезан ({e}).") from None
+    name = str(data.get("name") or "Импорт").strip()[:40] or "Импорт"
+    pr = sanitize_presets({name: {"style": data["style"], "theme": data.get("theme")}}).get(name)
+    if pr is None:
+        raise ValueError("В коде нет настроек.")
+    files = data.get("files") if isinstance(data.get("files"), dict) else {}
+    return name, pr, files
+
+
+def restore_files(files: dict) -> tuple[list[str], list[str]]:
+    """Записывает вложенные файлы. Уже существующие не перезаписываются."""
+    added: list[str] = []
+    kept: list[str] = []
+    total = 0
+    for kind, items in files.items():
+        if kind not in FILE_KINDS or not isinstance(items, dict):
+            continue
+        folder, exts = FILE_KINDS[kind]
+        for fname, b64 in list(items.items())[:60]:
+            name = re.sub(r"[^\w.\-]+", "_", Path(str(fname)).name)[:80]
+            if not name or Path(name).suffix.lower() not in exts:
+                continue
+            if (folder / name).exists():
+                kept.append(name)
+                continue
+            try:
+                blob = base64.b64decode(str(b64), validate=True)
+            except Exception:  # noqa: BLE001
+                continue
+            total += len(blob)
+            if total > EMBED_LIMIT * 2:
+                break
+            (folder / name).write_bytes(blob)
+            added.append(name)
+    return added, kept
+
+
+def write_preset_file(name: str, pr: dict) -> None:
+    try:
+        preset_path(name).write_text(encode_preset(name, pr)[0], "utf-8")
+    except OSError as e:
+        log.warning("Не удалось записать файл пресета %s: %s", name, e)
+
+
+def remove_preset_file(name: str) -> None:
+    try:
+        preset_path(name).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def scan_preset_files(cfg: dict) -> int:
+    """Подхватывает пресеты из .txt в data/presets (например, присланные другом), которых ещё нет в настройках."""
+    n = 0
+    for p in sorted(PRESET_DIR.glob("*.txt"))[:MAX_PRESETS * 2]:
+        if len(cfg["presets"]) >= MAX_PRESETS:
+            break
+        try:
+            name, pr, files = decode_preset(p.read_text("utf-8"))
+        except (OSError, ValueError, UnicodeDecodeError):
+            continue
+        if name in cfg["presets"]:
+            continue
+        restore_files(files)
+        cfg["presets"][name] = pr
+        n += 1
+    return n
 
 
 def coerce_style(old: dict, new: dict) -> dict:
@@ -1167,18 +1309,44 @@ async def api_open_app(request: web.Request):
 
 
 async def api_presets(request: web.Request):
-    """Пресеты внешнего вида: save (снимок текущих настроек), apply, delete."""
+    """Пресеты внешнего вида: save, apply, delete, export (код для передачи), import (вставка кода)."""
     app = request.app
     cfg = app["cfg"]
     body = await request.json()
     action, name = body.get("action"), str(body.get("name", "")).strip()[:40]
+    if action == "import":
+        try:
+            code_name, pr, files = decode_preset(body.get("code"))
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=400)
+        name = name or code_name
+        if name not in cfg["presets"] and len(cfg["presets"]) >= MAX_PRESETS:
+            return web.json_response({"error": f"Не больше {MAX_PRESETS} пресетов"}, status=400)
+        base, i = name, 2
+        while name in cfg["presets"] and not body.get("replace"):   # не затираем свой пресет с таким же именем
+            name = f"{base[:36]} {i}"
+            i += 1
+        added, kept = restore_files(files)
+        cfg["presets"][name] = pr
+        write_preset_file(name, pr)
+        save_config(cfg)
+        miss = [f for _, f in preset_refs(pr) if not any((FILE_KINDS[k][0] / f).exists() for k in FILE_KINDS)]
+        log.info("Пресет импортирован: %s (файлов добавлено: %d)", name, len(added))
+        return web.json_response({"ok": True, "presets": list(cfg["presets"]), "name": name, "added": added, "missing": miss})
     if not name:
         return web.json_response({"error": "Введи название пресета"}, status=400)
+    if action == "export":
+        pr = cfg["presets"].get(name)
+        if pr is None:
+            return web.json_response({"error": "Пресет не найден"}, status=404)
+        code, embedded, missing = encode_preset(name, pr)
+        return web.json_response({"ok": True, "code": code, "embedded": embedded, "missing": missing})
     if action == "save":
         if name not in cfg["presets"] and len(cfg["presets"]) >= MAX_PRESETS:
             return web.json_response({"error": f"Не больше {MAX_PRESETS} пресетов"}, status=400)
         snap = {"style": {k: v for k, v in cfg["style"].items() if k not in PRESET_SKIP}, "theme": cfg["theme"]}
         cfg["presets"][name] = sanitize_presets({name: snap})[name]
+        write_preset_file(name, cfg["presets"][name])
     elif action == "apply":
         pr = cfg["presets"].get(name)
         if pr is None:
@@ -1189,6 +1357,7 @@ async def api_presets(request: web.Request):
         await app["hub"].broadcast({"type": "style", "style": cfg["style"]})
     elif action == "delete":
         cfg["presets"].pop(name, None)
+        remove_preset_file(name)
     else:
         return web.json_response({"error": "bad action"}, status=400)
     save_config(cfg)
@@ -1429,6 +1598,8 @@ def main() -> None:
     setup_logging(console)
     lower_priority()
     cfg = load_config()
+    if scan_preset_files(cfg):
+        save_config(cfg)
     prune_cache(cfg["app"]["cacheMb"])
     port = int(cfg["port"])
     panel = f"http://127.0.0.1:{port}/app"
